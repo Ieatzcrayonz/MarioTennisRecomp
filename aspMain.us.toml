@@ -1,0 +1,15 @@
+# RSPRecomp config for Mario Tennis (USA) audio microcode.
+# Text lives in main at 0x8003DAD0 (0xC60 bytes, recomp image offset 0x1000 + 0xCAD0) and is loaded
+# by rspboot to IMEM 0x04001080; data at 0x8005A8C0. The seg19 audio driver sets these in its OSTask.
+text_offset = 0xDAD0
+text_size = 0xC60
+text_address = 0x04001080
+rom_file_path = "build_assets/mt.us.recomp.z64"
+output_file_path = "rsp/aspMain.cpp"
+output_function_name = "aspMain"
+# Command dispatch table at the start of the ucode data (DMEM 0x000): 16 halfword entries. The RSP
+# PC is 12 bits, so an entry like 0x02B0 means IMEM 0x12B0; 0x0000 entries are unused commands.
+extra_indirect_branch_targets = [
+    0x10EC, 0x139C, 0x119C, 0x1A64, 0x11C8, 0x17EC, 0x1208,
+    0x127C, 0x1348, 0x1248, 0x1C84, 0x12D4, 0x12B0, 0x1384
+]

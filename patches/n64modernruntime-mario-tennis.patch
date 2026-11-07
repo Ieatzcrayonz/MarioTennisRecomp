@@ -1,0 +1,42 @@
+diff --git a/ultramodern/include/ultramodern/config.hpp b/ultramodern/include/ultramodern/config.hpp
+index a8cd8e0..9674b04 100644
+--- a/ultramodern/include/ultramodern/config.hpp
++++ b/ultramodern/include/ultramodern/config.hpp
+@@ -12,6 +12,10 @@ namespace ultramodern {
+             Original,
+             Original2x,
+             Auto,
++            Res720p,
++            Res1080p,
++            Res1440p,
++            Res2160p,
+             OptionCount
+         };
+         enum class WindowMode {
+@@ -36,6 +40,7 @@ namespace ultramodern {
+             Original,
+             Expand,
+             Manual,
++            Stretch,    // 4:3 picture scaled to fill the whole window (Mario Tennis recomp)
+             OptionCount
+         };
+         enum class Antialiasing {
+@@ -84,6 +89,10 @@ namespace ultramodern {
+             {ultramodern::renderer::Resolution::Original, "Original"},
+             {ultramodern::renderer::Resolution::Original2x, "Original2x"},
+             {ultramodern::renderer::Resolution::Auto, "Auto"},
++            {ultramodern::renderer::Resolution::Res720p, "720p"},
++            {ultramodern::renderer::Resolution::Res1080p, "1080p"},
++            {ultramodern::renderer::Resolution::Res1440p, "1440p"},
++            {ultramodern::renderer::Resolution::Res2160p, "2160p"},
+         });
+ 
+         NLOHMANN_JSON_SERIALIZE_ENUM(ultramodern::renderer::WindowMode, {
+@@ -108,6 +117,7 @@ namespace ultramodern {
+             {ultramodern::renderer::AspectRatio::Original, "Original"},
+             {ultramodern::renderer::AspectRatio::Expand, "Expand"},
+             {ultramodern::renderer::AspectRatio::Manual, "Manual"},
++            {ultramodern::renderer::AspectRatio::Stretch, "Stretch"},
+         });
+ 
+         NLOHMANN_JSON_SERIALIZE_ENUM(ultramodern::renderer::Antialiasing, {

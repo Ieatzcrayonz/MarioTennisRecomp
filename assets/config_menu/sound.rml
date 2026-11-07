@@ -1,0 +1,43 @@
+<template name="config-menu__sound">
+    <head>
+    </head>
+    <body>
+        <form class="config__form">
+            <div class="config__hz-wrapper">
+                <!-- Options -->
+                <div class="config__wrapper" data-event-mouseout="set_cur_config_index(-1)">
+                        <div class="config-option" data-event-mouseover="set_cur_config_index(0)">
+                            <label class="config-option__title">Main Volume</label>
+                            <div class="config-option__range-wrapper config-option__list">
+                                <label class="config-option__range-label">{{main_volume}}%</label>
+                                <input
+                                    data-event-blur="set_cur_config_index(-1)"
+                                    data-event-focus="set_cur_config_index(0)"
+                                    class="nav-vert"
+                                    id="main_volume_input"
+                                    type="range"
+                                    min="0"
+                                    max="100"
+                                    style="flex: 1; margin: 0dp; nav-up: #tab_sound;"
+                                    data-value="main_volume"
+                                />
+                            </div>
+                        </div>
+                </div>
+                <!-- Descriptions -->
+                <div class="config__wrapper">
+					<p data-if="cur_config_index == 0">
+						Controls the main volume of the game.
+					</p>
+                    <p data-if="cur_config_index == 1">
+                        Controls the overall volume of background music.
+                    </p>
+                    <p data-if="cur_config_index == 2">
+                        Toggles whether or not the low-health beeping sound plays.
+                    </p>
+                </div>
+            </div>
+        </form>
+    </body>
+</template>
+    

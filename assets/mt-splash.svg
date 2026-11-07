@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Mario Tennis: Recompiled launcher background, sunny court theme. Original artwork drawn for
+     this project (sky, sun, clouds, hills, hedge and a grass court in perspective); no game assets.
+     1600x900, sliced to fill the window. The title (top left) and menu (bottom right) are drawn
+     by launcher.rml on top of this. The previous night-stadium art is in build_assets. -->
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3FB4EE"/>
+      <stop offset="0.7" stop-color="#8ED8F8"/>
+      <stop offset="1" stop-color="#C4EEFC"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#FFF6B0" stop-opacity="0.9"/>
+      <stop offset="0.5" stop-color="#FFF6B0" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#FFF6B0" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="field" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5CC24A"/>
+      <stop offset="1" stop-color="#3E9E38"/>
+    </linearGradient>
+    <g id="cloud">
+      <ellipse cx="0" cy="22" rx="120" ry="30" fill="#D6EEF8"/>
+      <circle cx="-60" cy="4" r="42" fill="#FFFFFF"/>
+      <circle cx="0" cy="-18" r="58" fill="#FFFFFF"/>
+      <circle cx="62" cy="2" r="44" fill="#FFFFFF"/>
+      <rect x="-104" y="0" width="208" height="34" rx="17" fill="#FFFFFF"/>
+    </g>
+    <g id="tree">
+      <rect x="-6" y="0" width="12" height="40" rx="4" fill="#8A5A2B"/>
+      <circle cx="0" cy="-10" r="34" fill="#3FA34D" stroke="#2C7A37" stroke-width="5"/>
+      <circle cx="-10" cy="-20" r="9" fill="#5CC46A"/>
+    </g>
+  </defs>
+
+  <!-- Sky and sun -->
+  <rect width="1600" height="900" fill="url(#sky)"/>
+  <circle cx="1390" cy="120" r="170" fill="url(#halo)"/>
+  <g stroke="#FFE14D" stroke-width="14" stroke-linecap="round">
+    <line x1="1390" y1="12" x2="1390" y2="-18"/>
+    <line x1="1498" y1="120" x2="1528" y2="120"/>
+    <line x1="1282" y1="120" x2="1252" y2="120"/>
+    <line x1="1466" y1="44" x2="1488" y2="22"/>
+    <line x1="1314" y1="44" x2="1292" y2="22"/>
+    <line x1="1466" y1="196" x2="1488" y2="218"/>
+    <line x1="1314" y1="196" x2="1292" y2="218"/>
+    <line x1="1390" y1="228" x2="1390" y2="258"/>
+  </g>
+  <circle cx="1390" cy="120" r="72" fill="#FFD21F" stroke="#F2A100" stroke-width="8"/>
+  <circle cx="1366" cy="98" r="18" fill="#FFF1A0"/>
+
+  <!-- Clouds -->
+  <use xlink:href="#cloud" transform="translate(860 120)"/>
+  <use xlink:href="#cloud" transform="translate(1060 270) scale(0.7)"/>
+  <use xlink:href="#cloud" transform="translate(250 370) scale(0.8)"/>
+  <use xlink:href="#cloud" transform="translate(1520 330) scale(0.55)"/>
+
+  <!-- Rolling hills -->
+  <path d="M0 430 Q180 330 380 400 Q560 460 760 380 Q980 300 1180 390 Q1380 470 1600 360 V520 H0 Z" fill="#8FDB6A"/>
+  <path d="M0 470 Q240 400 480 450 Q700 495 940 430 Q1200 370 1420 440 Q1520 470 1600 450 V540 H0 Z" fill="#6CCB52"/>
+
+  <!-- Lollipop trees -->
+  <use xlink:href="#tree" transform="translate(150 420)"/>
+  <use xlink:href="#tree" transform="translate(330 432) scale(0.75)"/>
+  <use xlink:href="#tree" transform="translate(1250 405) scale(0.85)"/>
+  <use xlink:href="#tree" transform="translate(1330 420) scale(0.7)"/>
+
+  <!-- Grass field and the hedge behind the court -->
+  <rect x="0" y="470" width="1600" height="430" fill="url(#field)"/>
+  <g fill="#2E8B3A">
+    <rect x="0" y="446" width="1600" height="34"/>
+    <circle cx="20" cy="448" r="18"/><circle cx="70" cy="444" r="20"/><circle cx="125" cy="448" r="18"/>
+    <circle cx="180" cy="444" r="20"/><circle cx="235" cy="448" r="18"/><circle cx="290" cy="444" r="20"/>
+    <circle cx="345" cy="448" r="18"/><circle cx="400" cy="444" r="20"/><circle cx="455" cy="448" r="18"/>
+    <circle cx="510" cy="444" r="20"/><circle cx="565" cy="448" r="18"/><circle cx="620" cy="444" r="20"/>
+    <circle cx="675" cy="448" r="18"/><circle cx="730" cy="444" r="20"/><circle cx="785" cy="448" r="18"/>
+    <circle cx="840" cy="444" r="20"/><circle cx="895" cy="448" r="18"/><circle cx="950" cy="444" r="20"/>
+    <circle cx="1005" cy="448" r="18"/><circle cx="1060" cy="444" r="20"/><circle cx="1115" cy="448" r="18"/>
+    <circle cx="1170" cy="444" r="20"/><circle cx="1225" cy="448" r="18"/><circle cx="1280" cy="444" r="20"/>
+    <circle cx="1335" cy="448" r="18"/><circle cx="1390" cy="444" r="20"/><circle cx="1445" cy="448" r="18"/>
+    <circle cx="1500" cy="444" r="20"/><circle cx="1555" cy="448" r="18"/><circle cx="1600" cy="444" r="20"/>
+  </g>
+  <rect x="0" y="474" width="1600" height="8" fill="#256F2F"/>
+
+  <!-- Court surface with mowing stripes -->
+  <polygon points="560,500 1040,500 1420,980 180,980" fill="#46B04A"/>
+  <polygon points="545,528 1055,528 1074,552 526,552" fill="#52BC55"/>
+  <polygon points="512,594 1088,594 1114,627 486,627" fill="#52BC55"/>
+  <polygon points="466,682 1134,682 1170,727 430,727" fill="#52BC55"/>
+  <polygon points="404,798 1196,798 1246,861 354,861" fill="#52BC55"/>
+
+  <!-- Court lines -->
+  <g stroke="#FFFFFF" stroke-width="7" stroke-linejoin="round" fill="none">
+    <polygon points="560,500 1040,500 1420,980 180,980"/>
+    <line x1="602" y1="500" x2="300" y2="980"/>
+    <line x1="998" y1="500" x2="1300" y2="980"/>
+    <line x1="545" y1="585" x2="1055" y2="585"/>
+    <line x1="410" y1="810" x2="1190" y2="810"/>
+    <line x1="800" y1="585" x2="800" y2="810"/>
+    <line x1="800" y1="500" x2="800" y2="514"/>
+  </g>
+
+  <!-- Net -->
+  <polygon points="430,648 1170,648 1170,690 430,690" fill="#1D3B2A" opacity="0.18"/>
+  <rect x="430" y="604" width="740" height="44" fill="#FFFFFF" opacity="0.28"/>
+  <g stroke="#FFFFFF" stroke-width="2" opacity="0.55">
+    <line x1="430" y1="615" x2="1170" y2="615"/>
+    <line x1="430" y1="626" x2="1170" y2="626"/>
+    <line x1="430" y1="637" x2="1170" y2="637"/>
+    <line x1="470" y1="604" x2="470" y2="648"/><line x1="530" y1="604" x2="530" y2="648"/>
+    <line x1="590" y1="604" x2="590" y2="648"/><line x1="650" y1="604" x2="650" y2="648"/>
+    <line x1="710" y1="604" x2="710" y2="648"/><line x1="770" y1="604" x2="770" y2="648"/>
+    <line x1="830" y1="604" x2="830" y2="648"/><line x1="890" y1="604" x2="890" y2="648"/>
+    <line x1="950" y1="604" x2="950" y2="648"/><line x1="1010" y1="604" x2="1010" y2="648"/>
+    <line x1="1070" y1="604" x2="1070" y2="648"/><line x1="1130" y1="604" x2="1130" y2="648"/>
+  </g>
+  <rect x="426" y="598" width="748" height="12" rx="4" fill="#FFFFFF" stroke="#C8D6CE" stroke-width="2"/>
+  <rect x="414" y="590" width="16" height="64" rx="5" fill="#F4F4F4" stroke="#7A8C82" stroke-width="3"/>
+  <rect x="1170" y="590" width="16" height="64" rx="5" fill="#F4F4F4" stroke="#7A8C82" stroke-width="3"/>
+
+  <!-- Ball in flight with a dotted arc and its shadow -->
+  <path d="M520 760 Q760 120 1130 296" fill="none" stroke="#FFFFFF" stroke-width="8" stroke-linecap="round" stroke-dasharray="2 26" opacity="0.85"/>
+  <ellipse cx="1040" cy="740" rx="44" ry="12" fill="#1D5A26" opacity="0.35"/>
+  <g transform="translate(1180 312) rotate(-20)">
+    <circle r="54" fill="#D9F23A" stroke="#7A8A10" stroke-width="6"/>
+    <path d="M-34 -40 Q0 0 -34 40" stroke="#FFFFFF" stroke-width="7" fill="none" stroke-linecap="round"/>
+    <path d="M34 -40 Q0 0 34 40" stroke="#FFFFFF" stroke-width="7" fill="none" stroke-linecap="round"/>
+    <circle cx="-18" cy="-22" r="12" fill="#F2FF9A" opacity="0.8"/>
+  </g>
+</svg>

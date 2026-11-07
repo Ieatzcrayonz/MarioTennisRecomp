@@ -1,0 +1,152 @@
+<rml>
+	<head>
+		<title>Launcher</title>
+		<link type="text/rcss" href="rml.rcss"/>
+		<link type="text/rcss" href="recomp.rcss"/>
+		<style>
+			body
+			{
+				width: 100%;
+				height: 100%;
+			}
+			/* Mario Tennis splash: full-window artwork that fades and drifts in slightly. */
+			@keyframes mt-splash-in
+			{
+				0% { opacity: 0; transform: scale(1.06); }
+				100% { opacity: 1; transform: scale(1); }
+			}
+			.launcher__mt-background
+			{
+				position: absolute;
+				top: 0;
+				right: 0;
+				bottom: 0;
+				left: 0;
+				animation: 3s cubic-out 1 mt-splash-in;
+			}
+			.launcher__mt-splash
+			{
+				width: 100%;
+				height: 100%;
+			}
+
+			/* Sunny court theme: chunky outlined title and pill-shaped menu buttons. */
+			.launcher .subtitle-title h1,
+			.launcher .subtitle-title h3,
+			.launcher .menu-list-item__label
+			{
+				font-family: "Luckiest Guy";
+				font-weight: normal;
+				text-transform: uppercase;
+			}
+			.launcher .subtitle-title h1
+			{
+				color: #FFD21F;
+				font-size: 104dp;
+				line-height: 110dp;
+				letter-spacing: 4dp;
+				font-effect: outline(9dp #B3261E), shadow(0dp 8dp #6E140F);
+			}
+			.launcher .subtitle-title h3
+			{
+				color: #FFFFFF;
+				font-effect: outline(5dp #1D4FA0);
+			}
+			.launcher .subtitle-title__disclaimer
+			{
+				white-space: nowrap;
+				color: #FFFFFF;
+				font-effect: outline(4dp #1D4FA0);
+			}
+			.launcher .subtitle-title[selected],
+			.launcher .subtitle-title:focus,
+			.launcher .subtitle-title:hover
+			{
+				color: #FFFFFF;
+			}
+			.launcher__vertical-split--right .launcher__content-quadrant
+			{
+				align-items: flex-end;
+				padding-right: 48dp;
+				padding-bottom: 48dp;
+			}
+			.launcher .menu-list-item
+			{
+				width: 400dp;
+				margin-top: 14dp;
+				padding: 20dp 28dp 12dp 28dp;
+				justify-content: center;
+				color: #1D4FA0;
+				background-color: #FFFFFF;
+				border-width: 5dp;
+				border-color: #1D4FA0;
+				border-radius: 40dp;
+				decorator: none;
+			}
+			.launcher .menu-list-item .menu-list-item__bullet
+			{
+				display: none;
+			}
+			.launcher .menu-list-item:focus:not(:disabled, [disabled]),
+			.launcher .menu-list-item:hover:not(:disabled, [disabled])
+			{
+				color: #FFFFFF;
+				background-color: #E53935;
+				border-color: #FFFFFF;
+				decorator: none;
+			}
+			.launcher .bottom-left label
+			{
+				color: #FFFFFF;
+				font-effect: outline(2dp #1D4FA0);
+			}
+		</style>
+	</head>
+	<body>
+		<div id="window" data-model="launcher_model">
+			<div class="launcher">
+				<div class="launcher__mt-background">
+					<svg src="mt-splash.svg" class="launcher__mt-splash" />
+				</div>
+				<div class="launcher__vertical-split">
+					<div class="launcher__title-quadrant">
+						<button class="subtitle-title" selected>
+							<div><h3>N64: Recompiled</h3></div>
+							<div><h1>Mario Tennis</h1></div>
+							<div class="subtitle-title__disclaimer">Native PC port</div>
+						</button>
+					</div>
+					<div class="launcher__content-quadrant"></div>
+				</div>
+				<div class="launcher__vertical-split launcher__vertical-split--right">
+					<div class="launcher__title-quadrant launcher__title-quadrant--right"></div>
+					<div class="launcher__content-quadrant">
+						<button data-if="!mm_rom_valid" onclick="select_rom" class="menu-list-item menu-list-item--right" autofocus>
+							<div class="menu-list-item__bullet">•</div>
+							<div class="menu-list-item__label">Select ROM</div>
+						</button>
+						<button data-if="mm_rom_valid" onclick="start_game" class="menu-list-item menu-list-item--right" autofocus>
+							<div class="menu-list-item__bullet">•</div>
+							<div class="menu-list-item__label">Start game</div>
+						</button>
+						<button onclick="open_controls" class="menu-list-item menu-list-item--right">
+							<div class="menu-list-item__bullet">•</div>
+							<div class="menu-list-item__label">Setup controls</div>
+						</button>
+						<button onclick="open_settings" class="menu-list-item menu-list-item--right">
+							<div class="menu-list-item__bullet">•</div>
+							<div class="menu-list-item__label">Settings</div>
+						</button>
+						<button onclick="exit_game" class="menu-list-item menu-list-item--right">
+							<div class="menu-list-item__bullet">•</div>
+							<div class="menu-list-item__label">Exit</div>
+						</button>
+					</div>
+				</div>
+				<div class="bottom-left">
+					<label>v{{version_number}}</label>
+				</div>
+			</div>
+		</div>
+	</body>
+</rml>

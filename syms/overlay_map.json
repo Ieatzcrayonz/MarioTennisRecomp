@@ -1,0 +1,364 @@
+[
+ {
+  "segment": "main",
+  "real_rom": 4944,
+  "vrom": 4096,
+  "vram": 2147684352,
+  "size": 175632,
+  "verified": true
+ },
+ {
+  "segment": 0,
+  "real_rom": 87744,
+  "vrom": 16777216,
+  "vram": 2148302848,
+  "size": 6272,
+  "verified": true
+ },
+ {
+  "segment": 19,
+  "real_rom": 9800560,
+  "vrom": 16783488,
+  "vram": 2150547456,
+  "size": 38136,
+  "verified": true
+ },
+ {
+  "segment": 31,
+  "real_rom": 9845472,
+  "vrom": 16821632,
+  "vram": 2148311040,
+  "size": 40992,
+  "verified": true
+ },
+ {
+  "segment": 35,
+  "real_rom": 9873968,
+  "vrom": 16862624,
+  "vram": 2152726528,
+  "size": 5132,
+  "verified": true
+ },
+ {
+  "segment": 71,
+  "real_rom": 10278768,
+  "vrom": 16867760,
+  "vram": 2148433920,
+  "size": 269748,
+  "verified": true
+ },
+ {
+  "segment": 86,
+  "real_rom": 10614064,
+  "vrom": 17137520,
+  "vram": 2148409344,
+  "size": 365360,
+  "verified": true
+ },
+ {
+  "segment": 285,
+  "real_rom": 12252416,
+  "vrom": 17502880,
+  "vram": 2150465536,
+  "size": 6344,
+  "verified": true
+ },
+ {
+  "segment": 454,
+  "real_rom": 13007760,
+  "vrom": 17509232,
+  "vram": 2150465536,
+  "size": 11360,
+  "verified": true
+ },
+ {
+  "segment": 462,
+  "real_rom": 13026080,
+  "vrom": 17520592,
+  "vram": 2148409344,
+  "size": 268448,
+  "verified": true
+ },
+ {
+  "segment": 703,
+  "real_rom": 13733888,
+  "vrom": 17789040,
+  "vram": 2149744640,
+  "size": 23792,
+  "verified": true
+ },
+ {
+  "segment": 78,
+  "real_rom": 10493792,
+  "vrom": 17812832,
+  "vram": 2148532224,
+  "size": 480,
+  "verified": true
+ },
+ {
+  "segment": 12,
+  "real_rom": 9637824,
+  "vrom": 17813312,
+  "vram": 2149580800,
+  "size": 80596,
+  "verified": true
+ },
+ {
+  "segment": 125,
+  "real_rom": 11140864,
+  "vrom": 17893920,
+  "vram": 2149580800,
+  "size": 39988,
+  "verified": true
+ },
+ {
+  "segment": 275,
+  "real_rom": 12160848,
+  "vrom": 17933920,
+  "vram": 2149580800,
+  "size": 41012,
+  "verified": true
+ },
+ {
+  "segment": 379,
+  "real_rom": 12515088,
+  "vrom": 17974944,
+  "vram": 2149580800,
+  "size": 70852,
+  "verified": true
+ },
+ {
+  "segment": 475,
+  "real_rom": 13255024,
+  "vrom": 18045808,
+  "vram": 2149580800,
+  "size": 64276,
+  "verified": true
+ },
+ {
+  "segment": 477,
+  "real_rom": 13289008,
+  "vrom": 18110096,
+  "vram": 2149580800,
+  "size": 49652,
+  "verified": true
+ },
+ {
+  "segment": 764,
+  "real_rom": 13937200,
+  "vrom": 18159760,
+  "vram": 2149580800,
+  "size": 44324,
+  "verified": true
+ },
+ {
+  "segment": 814,
+  "real_rom": 14175056,
+  "vrom": 18204096,
+  "vram": 2149580800,
+  "size": 46916,
+  "verified": true
+ },
+ {
+  "segment": 832,
+  "real_rom": 14219904,
+  "vrom": 18251024,
+  "vram": 2149580800,
+  "size": 66052,
+  "verified": true
+ },
+ {
+  "segment": 881,
+  "real_rom": 14470864,
+  "vrom": 18317088,
+  "vram": 2149580800,
+  "size": 65316,
+  "verified": true
+ },
+ {
+  "segment": 882,
+  "real_rom": 14502096,
+  "vrom": 18382416,
+  "vram": 2149580800,
+  "size": 51172,
+  "verified": true
+ },
+ {
+  "segment": 976,
+  "real_rom": 15102432,
+  "vrom": 18433600,
+  "vram": 2149580800,
+  "size": 40932,
+  "verified": true
+ },
+ {
+  "segment": 981,
+  "real_rom": 15129968,
+  "vrom": 18474544,
+  "vram": 2149580800,
+  "size": 53188,
+  "verified": true
+ },
+ {
+  "segment": 209,
+  "real_rom": 12070704,
+  "vrom": 18527744,
+  "vram": 1342177280,
+  "size": 25456,
+  "verified": true,
+  "tlb": true
+ },
+ {
+  "segment": 17,
+  "real_rom": 9760032,
+  "vrom": 18553200,
+  "vram": 268435456,
+  "size": 6112,
+  "verified": true,
+  "tlb": true
+ },
+ {
+  "segment": 33,
+  "real_rom": 9870256,
+  "vrom": 18559312,
+  "vram": 268435456,
+  "size": 7024,
+  "verified": true,
+  "tlb": true
+ },
+ {
+  "segment": 99,
+  "real_rom": 10944432,
+  "vrom": 18566336,
+  "vram": 268435456,
+  "size": 7648,
+  "verified": true,
+  "tlb": true
+ },
+ {
+  "segment": 100,
+  "real_rom": 10948432,
+  "vrom": 18573984,
+  "vram": 268435456,
+  "size": 5664,
+  "verified": true,
+  "tlb": true
+ },
+ {
+  "segment": 101,
+  "real_rom": 10951360,
+  "vrom": 18579648,
+  "vram": 268435456,
+  "size": 4864,
+  "verified": true,
+  "tlb": true
+ },
+ {
+  "segment": 102,
+  "real_rom": 10953968,
+  "vrom": 18584512,
+  "vram": 268435456,
+  "size": 6864,
+  "verified": true,
+  "tlb": true
+ },
+ {
+  "segment": 103,
+  "real_rom": 10957520,
+  "vrom": 18591376,
+  "vram": 268435456,
+  "size": 5616,
+  "verified": true,
+  "tlb": true
+ },
+ {
+  "segment": 104,
+  "real_rom": 10960448,
+  "vrom": 18596992,
+  "vram": 268435456,
+  "size": 5728,
+  "verified": true,
+  "tlb": true
+ },
+ {
+  "segment": 105,
+  "real_rom": 10963312,
+  "vrom": 18602720,
+  "vram": 268435456,
+  "size": 5248,
+  "verified": true,
+  "tlb": true
+ },
+ {
+  "segment": 106,
+  "real_rom": 10966240,
+  "vrom": 18607968,
+  "vram": 268435456,
+  "size": 5696,
+  "verified": true,
+  "tlb": true
+ },
+ {
+  "segment": 147,
+  "real_rom": 11441280,
+  "vrom": 18613664,
+  "vram": 268435456,
+  "size": 5536,
+  "verified": true,
+  "tlb": true
+ },
+ {
+  "segment": 163,
+  "real_rom": 11667680,
+  "vrom": 18619200,
+  "vram": 268435456,
+  "size": 6112,
+  "verified": true,
+  "tlb": true
+ },
+ {
+  "segment": 178,
+  "real_rom": 11744112,
+  "vrom": 18625312,
+  "vram": 268435456,
+  "size": 5424,
+  "verified": true,
+  "tlb": true
+ },
+ {
+  "segment": 200,
+  "real_rom": 11912512,
+  "vrom": 18630736,
+  "vram": 268435456,
+  "size": 8016,
+  "verified": true,
+  "tlb": true
+ },
+ {
+  "segment": 774,
+  "real_rom": 14012544,
+  "vrom": 18638752,
+  "vram": 268435456,
+  "size": 5136,
+  "verified": true,
+  "tlb": true
+ },
+ {
+  "segment": 965,
+  "real_rom": 15045840,
+  "vrom": 18643888,
+  "vram": 268435456,
+  "size": 7584,
+  "verified": true,
+  "tlb": true
+ },
+ {
+  "segment": 989,
+  "real_rom": 15173008,
+  "vrom": 18651472,
+  "vram": 268435456,
+  "size": 5264,
+  "verified": true,
+  "tlb": true
+ }
+]

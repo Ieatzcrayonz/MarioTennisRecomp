@@ -1,0 +1,104 @@
+diff --git a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuffer_renderer.cpp
+index c4cf1bf..be72f26 100644
+--- a/src/render/rt64_framebuffer_renderer.cpp
++++ b/src/render/rt64_framebuffer_renderer.cpp
+@@ -1689,7 +1689,20 @@ namespace RT64 {
+                         }
+ 
+                         triangles.scissor = convertFixedRect(call.callDesc.scissorRect, p.resolutionScale, p.fbWidth, invRatioScale, extOriginPercentage, int32_t(horizontalMisalignment), call.callDesc.scissorLeftOrigin, call.callDesc.scissorRightOrigin);
+-                        
++
++                        // Mario Tennis recomp: G_ZS_PRIM draws must produce exactly the prim depth at every pixel.
++                        // The vertex shader's z = primDepth * w is off by an ulp after the perspective divide on some
++                        // vertices, so coplanar primitives (e.g. flattened-model shadows relying on a strict depth
++                        // test to blend once) depth-fight at high resolution. A zero-height depth range makes the
++                        // window depth exactly primDepth without affecting anything else.
++                        if ((call.shaderDesc.otherMode.zSource() == G_ZS_PRIM) &&
++                            ((proj.type == Projection::Type::Perspective) || (proj.type == Projection::Type::Orthographic)))
++                        {
++                            const float primZ = std::clamp(call.callDesc.rdpParams.primDepth.x, 0.0f, 1.0f);
++                            triangles.viewport.minDepth = primZ;
++                            triangles.viewport.maxDepth = primZ;
++                        }
++
+                         if (triangles.vertexTestZ) {
+                             if ((proj.type == Projection::Type::Perspective) || (proj.type == Projection::Type::Orthographic)) {
+                                 instanceDrawCallVector[vertexTestZCallIndex].vertexTestZ.indexCount += call.callDesc.triangleCount * 3;
+diff --git a/src/render/rt64_vi_renderer.cpp b/src/render/rt64_vi_renderer.cpp
+index d597d75..45bd03b 100644
+--- a/src/render/rt64_vi_renderer.cpp
++++ b/src/render/rt64_vi_renderer.cpp
+@@ -10,6 +10,10 @@
+ namespace RT64 {
+     // VIRenderer
+ 
++    bool VIRenderer::stretchToWindow = false;
++    std::atomic<float> VIRenderer::cropLeft{ 0.0f };
++    std::atomic<float> VIRenderer::cropRight{ 1.0f };
++
+     VIRenderer::VIRenderer() { }
+ 
+     VIRenderer::~VIRenderer() { }
+@@ -28,6 +32,11 @@ namespace RT64 {
+         const hlslpp::float2 windowCenter = windowSize / 2;
+         const hlslpp::float2 relativeCoordinate = { coordinate.x - hdCenter.x, coordinate.y - hdCenter.y };
+ 
++        // Mario Tennis recomp: optional stretch to fill the window (independent x/y scale).
++        if (VIRenderer::stretchToWindow) {
++            return windowCenter + relativeCoordinate * (windowSize / hdSize);
++        }
++
+         // Window is wider than virtual HD TV, we do pillarboxing.
+         float relativeScale;
+         if ((windowSize.x / windowSize.y) > (hdSize.x / hdSize.y)) {
+@@ -124,5 +133,20 @@ namespace RT64 {
+ 
+         viewport = RenderViewport(topLeftViewport.x, topLeftViewport.y, bottomRightViewport.x - topLeftViewport.x, bottomRightViewport.y - topLeftViewport.y);
+         scissor = RenderRect(lround(topLeftScissor.x), lround(topLeftScissor.y), lround(bottomRightScissor.x), lround(bottomRightScissor.y));
++
++        // Mario Tennis recomp: in stretch mode, widen the viewport so only [cropLeft, cropRight] of
++        // the picture spans the window; the scissor (the window) cuts off the rest.
++        const float left = cropLeft.load(), right = cropRight.load();
++        if (stretchToWindow && (right - left) > 0.05f && (left > 0.0f || right < 1.0f)) {
++            const float width = viewport.width / (right - left);
++            viewport.x -= left * width;
++            viewport.width = width;
++        }
+     }
+-};
+\ No newline at end of file
++};
++
++// Mario Tennis recomp: called by the game glue (src/game/mt_dlfix.cpp) once per graphics task.
++extern "C" void rt64_set_horizontal_crop(float left, float right) {
++    RT64::VIRenderer::cropLeft.store(left);
++    RT64::VIRenderer::cropRight.store(right);
++}
+diff --git a/src/render/rt64_vi_renderer.h b/src/render/rt64_vi_renderer.h
+index 9e83151..f090399 100644
+--- a/src/render/rt64_vi_renderer.h
++++ b/src/render/rt64_vi_renderer.h
+@@ -4,6 +4,8 @@
+ 
+ #pragma once
+ 
++#include <atomic>
++
+ #include "common/rt64_user_configuration.h"
+ #include "hle/rt64_vi.h"
+ 
+@@ -33,6 +35,13 @@ namespace RT64 {
+         VIRenderer();
+         ~VIRenderer();
+         void render(const RenderParams &p);
++        // Mario Tennis recomp: scale the picture to fill the window, ignoring its aspect ratio.
++        static bool stretchToWindow;
++        // Mario Tennis recomp: with stretchToWindow, only this horizontal fraction of the picture
++        // (0..1 of the framebuffer width) is shown, stretched across the window. Set per frame by
++        // the game glue through rt64_set_horizontal_crop().
++        static std::atomic<float> cropLeft, cropRight;
++
+         static void getViewportAndScissor(const RenderSwapChain *swapChain, const VI &vi, hlslpp::float2 resolutionScale, uint32_t downsamplingScale, RenderViewport &viewport, RenderRect &scissor, hlslpp::float2 &fbHdRegion);
+     };
+ };
+\ No newline at end of file

@@ -1,0 +1,15 @@
+# Never commit the game itself or anything generated from it.
+*.z64
+*.n64
+*.v64
+build_assets/
+RecompiledFuncs/
+rsp/aspMain.cpp
+
+# Build output and local stuff
+build/
+screenshots/
+lib
+lib/
+*.log
+.vs/
