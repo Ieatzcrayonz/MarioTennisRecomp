@@ -47,6 +47,8 @@ Requirements: Visual Studio 2022+ Build Tools, LLVM/clang-cl, CMake, Ninja, Pyth
    then `sh tools/recompile.sh`.
 4. Build: `tools\build_game.bat` (edit the Visual Studio path in it if yours differs). The result is
    `build\MarioTennisRecompiled.exe`. Run it with this folder as the working directory.
+5. Release build: `tools\build_live.bat` (output in `build-live\`). It needs no generated code, so step 3 can
+   be skipped: the exe translates the game's code, and runs its audio microcode, from the player's ROM at startup.
 5. Release build: `toolsuild_live.bat` → `build-live\`. It needs no generated code (skip step 3): the exe
    translates the game's code, and runs its audio microcode, from the player's ROM at startup.
 
