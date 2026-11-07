@@ -7,7 +7,9 @@
 #include "mt_game.h"
 #include "librecomp/game.hpp"
 #include "librecomp/overlays.hpp"
+#ifndef MT_LIVE_RECOMP
 #include "../../RecompiledFuncs/recomp_overlays.inl"
+#endif
 
 namespace {
     struct OverlayInfo {
@@ -79,6 +81,7 @@ namespace {
     }
 }
 
+#ifndef MT_LIVE_RECOMP // live builds: src/game/mt_live.cpp
 void mt::register_overlays() {
     recomp::overlays::overlay_section_table_data_t sections {
         .code_sections = section_table,
@@ -93,6 +96,7 @@ void mt::register_overlays() {
 
     recomp::overlays::register_overlays(sections, overlays);
 }
+#endif
 
 void mt::on_init(uint8_t* rdram, recomp_context* ctx) {
     // IPL3 copies ROM 0x1000..+1 MiB to the header entrypoint (0x80300000).

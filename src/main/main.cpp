@@ -13,6 +13,7 @@ extern "C" void mt_prof_event(const char* what, uint32_t arg);
 #include <thread>
 #include <chrono>
 #include <cstdlib>
+#include <string>
 
 #include "nfd.h"
 
@@ -326,12 +327,32 @@ void reset_audio(uint32_t output_freq) {
     update_audio_converter();
 }
 
+RspUcodeFunc mt_rsp_interpret;
+#ifndef MT_LIVE_RECOMP
 extern RspUcodeFunc aspMain;
+RspUcodeFunc mt_rsp_compare;
+#endif
+
+// Audio: live builds interpret the game's own audio microcode from RDRAM (no Nintendo code in the exe).
+// Dev builds use the recompiled microcode, or MT_AUDIO=interp / MT_AUDIO=compare.
+static RspUcodeFunc* audio_ucode() {
+#ifdef MT_LIVE_RECOMP
+    return mt_rsp_interpret;
+#else
+    static RspUcodeFunc* func = [] {
+        const char* mode = std::getenv("MT_AUDIO");
+        if (mode && std::string(mode) == "interp") return &mt_rsp_interpret;
+        if (mode && std::string(mode) == "compare") return &mt_rsp_compare;
+        return &aspMain;
+    }();
+    return func;
+#endif
+}
 
 RspUcodeFunc* get_rsp_microcode(const OSTask* task) {
     switch (task->t.type) {
     case M_AUDTASK:
-        return aspMain;
+        return audio_ucode();
 
     default:
         fprintf(stderr, "Unknown task: %" PRIu32 "\n", task->t.type);

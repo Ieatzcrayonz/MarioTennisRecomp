@@ -65,6 +65,10 @@ add_subdirectory(${CMAKE_SOURCE_DIR}/lib/N64ModernRuntime)
 
 target_include_directories(rt64 PRIVATE ${CMAKE_BINARY_DIR}/rt64/src)
 
+# MT_LIVE_RECOMP: build without any recompiled game code; the exe recompiles the game's code from the
+# player's ROM at startup (src/game/mt_live.cpp). This is the configuration for public releases.
+option(MT_LIVE_RECOMP "Recompile the game code from the player's ROM at runtime" OFF)
+
 # RecompiledFuncs - Library containing the primary recompiler output
 add_library(RecompiledFuncs STATIC)
 
@@ -82,8 +86,13 @@ target_include_directories(RecompiledFuncs PRIVATE
     ${CMAKE_SOURCE_DIR}/lib/N64ModernRuntime/N64Recomp/include
 )
 
-file(GLOB FUNC_C_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/RecompiledFuncs/*.c)
-file(GLOB FUNC_CXX_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/RecompiledFuncs/*.cpp)
+if (MT_LIVE_RECOMP)
+    set(FUNC_C_SOURCES "")
+    set(FUNC_CXX_SOURCES ${CMAKE_SOURCE_DIR}/src/game/mt_live_empty.c)
+else()
+    file(GLOB FUNC_C_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/RecompiledFuncs/*.c)
+    file(GLOB FUNC_CXX_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/RecompiledFuncs/*.cpp)
+endif()
 
 target_sources(RecompiledFuncs PRIVATE ${FUNC_C_SOURCES} ${FUNC_CXX_SOURCES})
 
@@ -138,7 +147,7 @@ set (SOURCES
     ${CMAKE_SOURCE_DIR}/src/ui/elements/ui_text_input.cpp
     ${CMAKE_SOURCE_DIR}/src/ui/elements/ui_toggle.cpp
 
-    ${CMAKE_SOURCE_DIR}/rsp/aspMain.cpp
+    ${CMAKE_SOURCE_DIR}/src/game/mt_rsp_interp.cpp
 
     ${CMAKE_SOURCE_DIR}/lib/RmlUi/Backends/RmlUi_Platform_SDL.cpp
 )
@@ -283,6 +292,16 @@ if (CMAKE_SYSTEM_NAME MATCHES "Linux")
     find_package(Threads REQUIRED)
 
     target_link_libraries(MarioTennisRecompiled PRIVATE "-latomic -static-libstdc++" ${CMAKE_DL_LIBS} Threads::Threads)
+endif()
+
+if (NOT MT_LIVE_RECOMP)
+    # Recompiled audio microcode (dev builds only; live builds interpret it from the ROM).
+    target_sources(MarioTennisRecompiled PRIVATE ${CMAKE_SOURCE_DIR}/rsp/aspMain.cpp)
+endif()
+if (MT_LIVE_RECOMP)
+    target_sources(MarioTennisRecompiled PRIVATE ${CMAKE_SOURCE_DIR}/src/game/mt_live.cpp)
+    target_compile_definitions(MarioTennisRecompiled PRIVATE MT_LIVE_RECOMP)
+    target_link_libraries(MarioTennisRecompiled PRIVATE N64Recomp LiveRecomp)
 endif()
 
 target_link_libraries(MarioTennisRecompiled PRIVATE

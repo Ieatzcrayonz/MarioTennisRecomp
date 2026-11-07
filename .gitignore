@@ -8,8 +8,10 @@ rsp/aspMain.cpp
 
 # Build output and local stuff
 build/
+build-*/
 screenshots/
 lib
 lib/
 *.log
 .vs/
+release/

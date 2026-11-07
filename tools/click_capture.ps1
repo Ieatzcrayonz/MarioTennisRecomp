@@ -1,6 +1,6 @@
-# Launch to the launcher, then do a list of clicks (client coords) with captures in between.
+﻿# Launch to the launcher, then do a list of clicks (client coords) with captures in between.
 # Usage: & tools\click_capture.ps1 -Prefix name -Steps "1450,843;shot;400,100;shot"
-param([string]$Prefix = "ui", [string]$Steps = "shot", [string]$OutDir = "$PSScriptRoot\..\screenshots\runs")
+param([string]$Exe = "build", [string]$WorkDir = "", [string]$Prefix = "ui", [string]$Steps = "shot", [string]$OutDir = "$PSScriptRoot\..\screenshots\runs")
 $sig = @'
 using System; using System.Runtime.InteropServices;
 public class MTC { [StructLayout(LayoutKind.Sequential)] public struct R { public int L,T,Rt,B; }
@@ -15,7 +15,7 @@ public class MTC { [StructLayout(LayoutKind.Sequential)] public struct R { publi
 Add-Type $sig; Add-Type -AssemblyName System.Drawing
 New-Item -ItemType Directory -Force $OutDir | Out-Null
 $root = Resolve-Path "$PSScriptRoot\.."
-$p = Start-Process -FilePath "$root\build\MarioTennisRecompiled.exe" -WorkingDirectory $root -PassThru
+$p = Start-Process -FilePath "$root\$Exe\MarioTennisRecompiled.exe" -WorkingDirectory $(if ($WorkDir) { $WorkDir } else { $root }) -PassThru
 Start-Sleep -Seconds 5
 $i = 0
 foreach ($s in $Steps.Split(';')) {
@@ -35,3 +35,5 @@ foreach ($s in $Steps.Split(';')) {
   Start-Sleep -Milliseconds 1200
 }
 if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }
+
+

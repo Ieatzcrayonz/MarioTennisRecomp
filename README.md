@@ -33,7 +33,7 @@ If it doesn't match, the port won't recognise the file. The usual cause is the w
 - A new sunny court launcher screen.
 
 ## Building (Windows)
-Requirements: Visual Studio 2022+ Build Tools, LLVM/clang-cl, CMake, Ninja, Python 3 and Git Bash.
+Release builds (no game code inside): run `toolsbuild_live.bat` instead, which translates the game from the ROM at startup. Requirements: Visual Studio 2022+ Build Tools, LLVM/clang-cl, CMake, Ninja, Python 3 and Git Bash.
 
 1. Clone [Zelda64Recomp](https://github.com/Zelda64Recomp/Zelda64Recomp) with `--recursive` and make a
    `lib` link in this folder pointing at its `lib` folder (it provides RT64, RmlUi, N64ModernRuntime and friends).
