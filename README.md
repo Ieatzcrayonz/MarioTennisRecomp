@@ -26,6 +26,11 @@ Get-FileHash "Mario Tennis (USA).z64" -Algorithm SHA1
 
 If it doesn't match, the port won't recognise the file. The usual cause is the wrong region or a modified (hacked or translated) ROM.
 
+## Download
+Get `MarioTennisRecompiled-Windows.zip` from the [Releases](https://github.com/Ieatzcrayonz/MarioTennisRecomp/releases) page,
+unzip it, run `MarioTennisRecompiled.exe`, pick your ROM and press Start game. The download contains no game
+code or data: the game is translated from your own ROM when it starts.
+
 ## Features
 - Runs at any resolution: 720p, 1080p, 1440p, 4K or matching the window, with widescreen stretch.
 - Controller support (including DualSense), with rumble and remappable controls.
@@ -33,15 +38,17 @@ If it doesn't match, the port won't recognise the file. The usual cause is the w
 - A new sunny court launcher screen.
 
 ## Building (Windows)
-Release builds (no game code inside): run `toolsbuild_live.bat` instead, which translates the game from the ROM at startup. Requirements: Visual Studio 2022+ Build Tools, LLVM/clang-cl, CMake, Ninja, Python 3 and Git Bash.
+Requirements: Visual Studio 2022+ Build Tools, LLVM/clang-cl, CMake, Ninja, Python 3 and Git Bash.
 
 1. Clone [Zelda64Recomp](https://github.com/Zelda64Recomp/Zelda64Recomp) with `--recursive` and make a
    `lib` link in this folder pointing at its `lib` folder (it provides RT64, RmlUi, N64ModernRuntime and friends).
-2. Apply the two patches in `patches/` to `lib/N64ModernRuntime` and `lib/rt64`.
+2. Apply the patches in `patches/` to `lib/N64ModernRuntime`, `lib/N64ModernRuntime/N64Recomp` and `lib/rt64`.
 3. Generate the recompiled code from your ROM: `python tools/gen_symbols.py "<path to Mario Tennis (USA).z64>"`,
    then `sh tools/recompile.sh`.
 4. Build: `tools\build_game.bat` (edit the Visual Studio path in it if yours differs). The result is
    `build\MarioTennisRecompiled.exe`. Run it with this folder as the working directory.
+5. Release build: `toolsuild_live.bat` → `build-live\`. It needs no generated code (skip step 3): the exe
+   translates the game's code, and runs its audio microcode, from the player's ROM at startup.
 
 Technical notes on how the port works are in [NOTES.md](NOTES.md).
 
