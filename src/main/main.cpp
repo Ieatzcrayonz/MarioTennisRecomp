@@ -515,17 +515,28 @@ void reorder_texture_pack(recomp::mods::ModContext&) {
 #ifdef _WIN32
 // Crash report: prints the faulting address (as an offset into the exe, for llvm-symbolizer with the
 // .pdb) so bug reports from players can be traced. Written to stderr / the MT_LOG file.
+void mt_print_crash_stack(void* context_record);  // src/game/mt_prof.cpp
+
 static LONG WINAPI mt_crash_filter(EXCEPTION_POINTERS* info) {
     const EXCEPTION_RECORD* rec = info->ExceptionRecord;
     HMODULE exe = GetModuleHandleW(nullptr);
     uintptr_t addr = (uintptr_t)rec->ExceptionAddress;
-    fprintf(stderr, "[mt] CRASH: exception 0x%08lX at %p (exe+0x%llX)", rec->ExceptionCode, rec->ExceptionAddress,
-            (unsigned long long)(addr - (uintptr_t)exe));
+    // Name the module the crash happened in (the exe, librashader.dll, a graphics driver...).
+    HMODULE module = nullptr;
+    char module_path[MAX_PATH] = "?";
+    if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCWSTR)rec->ExceptionAddress, &module)) {
+        GetModuleFileNameA(module, module_path, MAX_PATH);
+    }
+    const char* module_name = strrchr(module_path, '\\') ? strrchr(module_path, '\\') + 1 : module_path;
+    fprintf(stderr, "[mt] CRASH: exception 0x%08lX at %p (exe+0x%llX) in %s+0x%llX", rec->ExceptionCode, rec->ExceptionAddress,
+            (unsigned long long)(addr - (uintptr_t)exe), module_name,
+            (unsigned long long)(addr - (uintptr_t)(module != nullptr ? module : exe)));
     if (rec->ExceptionCode == EXCEPTION_ACCESS_VIOLATION && rec->NumberParameters >= 2) {
         fprintf(stderr, ", %s address %p", rec->ExceptionInformation[0] ? "writing" : "reading", (void*)rec->ExceptionInformation[1]);
     }
     fprintf(stderr, "\n");
     fflush(stderr);
+    mt_print_crash_stack(info->ContextRecord);
     return EXCEPTION_CONTINUE_SEARCH;
 }
 #endif

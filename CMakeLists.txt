@@ -65,6 +65,14 @@ add_subdirectory(${CMAKE_SOURCE_DIR}/lib/N64ModernRuntime)
 
 target_include_directories(rt64 PRIVATE ${CMAKE_BINARY_DIR}/rt64/src)
 
+# Mario Tennis recomp: Slang shader presets (CRT-Royale etc.) through librashader, loaded at runtime from
+# librashader.dll (build it from https://github.com/SnowflakePowered/librashader; see README). The code lives in
+# src/rt64ext and is compiled into rt64 so it can reach RT64's native D3D12 / Vulkan objects.
+target_sources(rt64 PRIVATE ${CMAKE_SOURCE_DIR}/src/rt64ext/rt64_mt_shader.cpp)
+target_include_directories(rt64 PUBLIC
+    ${CMAKE_SOURCE_DIR}/src/rt64ext
+    ${CMAKE_SOURCE_DIR}/thirdparty/librashader/include)
+
 # MT_LIVE_RECOMP: build without any recompiled game code; the exe recompiles the game's code from the
 # player's ROM at startup (src/game/mt_live.cpp). This is the configuration for public releases.
 option(MT_LIVE_RECOMP "Recompile the game code from the player's ROM at runtime" OFF)
@@ -235,7 +243,16 @@ if (WIN32)
     # database next to the executable.
     add_custom_command(TARGET MarioTennisRecompiled POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/assets" "$<TARGET_FILE_DIR:MarioTennisRecompiled>/assets"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/recompcontrollerdb.txt" $<TARGET_FILE_DIR:MarioTennisRecompiled>)
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_SOURCE_DIR}/recompcontrollerdb.txt" $<TARGET_FILE_DIR:MarioTennisRecompiled>
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/slang-shaders" "$<TARGET_FILE_DIR:MarioTennisRecompiled>/slang-shaders")
+
+    # Slang shaders need librashader.dll next to the exe (optional: without it the Shader option does nothing).
+    # Point LIBRASHADER_DLL at a build of https://github.com/SnowflakePowered/librashader (see README).
+    set(LIBRASHADER_DLL "" CACHE FILEPATH "Path to librashader.dll, copied next to the executable")
+    if (LIBRASHADER_DLL AND EXISTS "${LIBRASHADER_DLL}")
+        add_custom_command(TARGET MarioTennisRecompiled POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${LIBRASHADER_DLL}" $<TARGET_FILE_DIR:MarioTennisRecompiled>)
+    endif()
 
     set_target_properties(
         MarioTennisRecompiled

@@ -294,7 +294,7 @@
                                 data-checked="hr_option"
                                 value="Original"
                                 id="hr_original"
-                                style="nav-up: #msaa_none; nav-down: #apply_button"
+                                style="nav-up: #msaa_none; nav-down: #api_d3d12"
                             />
                             <label class="config-option__tab-label" for="hr_original">Original</label>
                             <input type="radio"
@@ -304,7 +304,7 @@
                                 data-checked="hr_option"
                                 value="Clamp16x9"
                                 id="hr_16_9"
-                                style="nav-up: #msaa_2x; nav-down: #apply_button"
+                                style="nav-up: #msaa_2x; nav-down: #api_vulkan"
                                 data-style-nav-up="msaa2x_supported ? '#msaa_2x' : '#msaa_none'"
                             />
                             <label class="config-option__tab-label" for="hr_16_9">16:9</label>
@@ -315,10 +315,82 @@
                                 data-checked="hr_option"
                                 value="Full"
                                 id="hr_full"
-                                style="nav-up: #msaa_4x; nav-down: #apply_button"
+                                style="nav-up: #msaa_4x; nav-down: #api_vulkan"
                                 data-style-nav-up="msaa4x_supported ? '#msaa_4x' : (msaa2x_supported ? '#msaa_2x' : '#msaa_none')"
                             />
                             <label class="config-option__tab-label" for="hr_full">Expand</label>
+                        </div>
+                    </div>
+
+                    <div class="config-option" data-event-mouseover="set_cur_config_index(7)">
+                        <label class="config-option__title">Graphics API</label>
+                        <div class="config-option__list">
+                            <input type="radio"
+                                data-event-blur="set_cur_config_index(-1)"
+                                data-event-focus="set_cur_config_index(7)"
+                                name="api-option"
+                                data-checked="api_option"
+                                value="D3D12"
+                                id="api_d3d12"
+                                style="nav-up: #hr_original; nav-down: #shader_off"
+                            />
+                            <label class="config-option__tab-label" for="api_d3d12">DirectX 12</label>
+                            <input type="radio"
+                                data-event-blur="set_cur_config_index(-1)"
+                                data-event-focus="set_cur_config_index(7)"
+                                name="api-option"
+                                data-checked="api_option"
+                                value="Vulkan"
+                                id="api_vulkan"
+                                style="nav-up: #hr_16_9; nav-down: #shader_royale"
+                            />
+                            <label class="config-option__tab-label" for="api_vulkan">Vulkan</label>
+                        </div>
+                    </div>
+
+                    <div class="config-option" data-event-mouseover="set_cur_config_index(8)">
+                        <label class="config-option__title">Shader</label>
+                        <div class="config-option__list">
+                            <input type="radio"
+                                data-event-blur="set_cur_config_index(-1)"
+                                data-event-focus="set_cur_config_index(8)"
+                                name="shader-option"
+                                data-checked="shader_option"
+                                value="Off"
+                                id="shader_off"
+                                style="nav-up: #api_d3d12; nav-down: #apply_button"
+                            />
+                            <label class="config-option__tab-label" for="shader_off">Off</label>
+                            <input type="radio"
+                                data-event-blur="set_cur_config_index(-1)"
+                                data-event-focus="set_cur_config_index(8)"
+                                name="shader-option"
+                                data-checked="shader_option"
+                                value="CrtRoyale"
+                                id="shader_royale"
+                                style="nav-up: #api_vulkan; nav-down: #apply_button"
+                            />
+                            <label class="config-option__tab-label" for="shader_royale">CRT-Royale</label>
+                            <input type="radio"
+                                data-event-blur="set_cur_config_index(-1)"
+                                data-event-focus="set_cur_config_index(8)"
+                                name="shader-option"
+                                data-checked="shader_option"
+                                value="CrtRoyaleFast"
+                                id="shader_royale_fast"
+                                style="nav-up: #api_vulkan; nav-down: #apply_button"
+                            />
+                            <label class="config-option__tab-label" for="shader_royale_fast">CRT-Royale Fast</label>
+                            <input type="radio"
+                                data-event-blur="set_cur_config_index(-1)"
+                                data-event-focus="set_cur_config_index(8)"
+                                name="shader-option"
+                                data-checked="shader_option"
+                                value="CrtLottes"
+                                id="shader_lottes"
+                                style="nav-up: #api_vulkan; nav-down: #apply_button"
+                            />
+                            <label class="config-option__tab-label" for="shader_lottes">CRT-Lottes</label>
                         </div>
                     </div>
 
@@ -357,6 +429,18 @@
                     <p data-if="cur_config_index == 6">
                         Adjusts the placement of HUD elements to fit the selected aspect ratio. <b>Expand</b> will use the aspect ratio of the game's output window.
                     </p>
+                    <p data-if="cur_config_index == 7">
+                        Chooses how the game talks to your graphics card. <b>DirectX 12</b> is the default. Try <b>Vulkan</b> if you see glitches or poor performance with DirectX 12, or the other way round.
+                        <br />
+                        <br />
+                        <b>Takes effect the next time you start the game.</b> If the chosen one can't start on your PC, the game switches to the other one and tells you.
+                    </p>
+                    <p data-if="cur_config_index == 8">
+                        Applies a RetroArch shader to the picture to make it look like an old CRT television. <b>CRT-Royale</b> is the most detailed (phosphor mask, scanlines, glow and a curved screen) and also the most demanding. <b>CRT-Royale Fast</b> looks similar with a cheaper glow. <b>CRT-Lottes</b> is a simple, light CRT look.
+                        <br />
+                        <br />
+                        Shaders work best in <b>Fullscreen</b> at your screen's native resolution. Menus are drawn on top without the shader. If a shader can't be loaded the game simply shows the normal picture.
+                    </p>
                 </div>
             </div>
             <div class="config__footer">
@@ -369,7 +453,7 @@
                         data-attrif-disabled="!options_changed"
                         onclick="apply_options"
                         id="apply_button"
-                        style="nav-up:#hr_original"
+                        style="nav-up:#shader_off"
                     >
                         <div class="button__label">Apply<span class="prompt-font-sm">{{gfx_help__apply}}</span></div>
                     </button>

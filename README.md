@@ -36,6 +36,9 @@ code or data: the game is translated from your own ROM when it starts.
 - Controller support (including DualSense), with rumble and remappable controls.
 - Saves work as on the cartridge.
 - A new sunny court launcher screen.
+- DirectX 12 or Vulkan (Settings → Graphics → Graphics API).
+- Optional CRT shaders from RetroArch (CRT-Royale, CRT-Royale Fast, CRT-Lottes) via librashader
+  (Settings → Graphics → Shader).
 
 ## Building (Windows)
 Requirements: Visual Studio 2022+ Build Tools, LLVM/clang-cl, CMake, Ninja, Python 3 and Git Bash.
@@ -49,14 +52,20 @@ Requirements: Visual Studio 2022+ Build Tools, LLVM/clang-cl, CMake, Ninja, Pyth
    `build\MarioTennisRecompiled.exe`. Run it with this folder as the working directory.
 5. Release build: `tools\build_live.bat` (output in `build-live\`). It needs no generated code, so step 3 can
    be skipped: the exe translates the game's code, and runs its audio microcode, from the player's ROM at startup.
-5. Release build: `toolsuild_live.bat` → `build-live\`. It needs no generated code (skip step 3): the exe
-   translates the game's code, and runs its audio microcode, from the player's ROM at startup.
+6. Optional, for the Shader option: build `librashader.dll` from
+   [librashader](https://github.com/SnowflakePowered/librashader) (tag `librashader-v0.12.1`) with
+   `cargo xtask build --profile release`, and configure with `-DLIBRASHADER_DLL=<path>\librashader.dll` so it is
+   copied next to the exe (`tools\build_live.bat` does this for `F:\Recomps\src\librashader`). The shader presets
+   in `slang-shaders/` are copied automatically. Without the DLL the game runs normally and the option does nothing.
 
 Technical notes on how the port works are in [NOTES.md](NOTES.md).
 
 ## Credits
 - N64Recomp, N64ModernRuntime and the Zelda64Recomp frontend, by Wiseguy and contributors (GPL-3.0).
 - RT64 by Darío and contributors.
+- [librashader](https://github.com/SnowflakePowered/librashader) by Ronny Chan (MPL-2.0 / GPL-3.0).
+- CRT-Royale by TroggleMonkey (GPL-2.0+), CRT-Lottes by Timothy Lottes (public domain), from the libretro
+  [slang-shaders](https://github.com/libretro/slang-shaders) collection. See [slang-shaders/README.md](slang-shaders/README.md).
 - Luckiest Guy font by Astigmatic (Apache 2.0).
 
 Mario Tennis is a trademark of Nintendo. This project is not affiliated with or endorsed by Nintendo.

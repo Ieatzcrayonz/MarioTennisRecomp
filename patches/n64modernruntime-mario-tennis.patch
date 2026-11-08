@@ -70,7 +70,7 @@ index 8a03dbd..cab7e40 100644
                  if (game_entry.on_init_callback) {
                      game_entry.on_init_callback(rdram, context);
 diff --git a/ultramodern/include/ultramodern/config.hpp b/ultramodern/include/ultramodern/config.hpp
-index a8cd8e0..9674b04 100644
+index a8cd8e0..139eb99 100644
 --- a/ultramodern/include/ultramodern/config.hpp
 +++ b/ultramodern/include/ultramodern/config.hpp
 @@ -12,6 +12,10 @@ namespace ultramodern {
@@ -92,7 +92,31 @@ index a8cd8e0..9674b04 100644
              OptionCount
          };
          enum class Antialiasing {
-@@ -84,6 +89,10 @@ namespace ultramodern {
+@@ -58,6 +63,15 @@ namespace ultramodern {
+             OptionCount
+         };
+ 
++        // Mario Tennis recomp: Slang shader preset applied to the final picture (librashader).
++        enum class ShaderOption {
++            Off,
++            CrtRoyale,
++            CrtRoyaleFast,
++            CrtLottes,
++            OptionCount
++        };
++
+         class GraphicsConfig {
+         public:
+             bool developer_mode;
+@@ -71,6 +85,7 @@ namespace ultramodern {
+             HighPrecisionFramebuffer hpfb_option;
+             int rr_manual_value;
+             int ds_option;
++            ShaderOption shader_option = ShaderOption::Off;
+ 
+             virtual ~GraphicsConfig() = default;
+ 
+@@ -84,6 +99,10 @@ namespace ultramodern {
              {ultramodern::renderer::Resolution::Original, "Original"},
              {ultramodern::renderer::Resolution::Original2x, "Original2x"},
              {ultramodern::renderer::Resolution::Auto, "Auto"},
@@ -103,7 +127,18 @@ index a8cd8e0..9674b04 100644
          });
  
          NLOHMANN_JSON_SERIALIZE_ENUM(ultramodern::renderer::WindowMode, {
-@@ -108,6 +117,7 @@ namespace ultramodern {
+@@ -104,10 +123,18 @@ namespace ultramodern {
+             {ultramodern::renderer::GraphicsApi::Metal, "Metal"},
+         });
+ 
++        NLOHMANN_JSON_SERIALIZE_ENUM(ultramodern::renderer::ShaderOption, {
++            {ultramodern::renderer::ShaderOption::Off, "Off"},
++            {ultramodern::renderer::ShaderOption::CrtRoyale, "CrtRoyale"},
++            {ultramodern::renderer::ShaderOption::CrtRoyaleFast, "CrtRoyaleFast"},
++            {ultramodern::renderer::ShaderOption::CrtLottes, "CrtLottes"},
++        });
++
+         NLOHMANN_JSON_SERIALIZE_ENUM(ultramodern::renderer::AspectRatio, {
              {ultramodern::renderer::AspectRatio::Original, "Original"},
              {ultramodern::renderer::AspectRatio::Expand, "Expand"},
              {ultramodern::renderer::AspectRatio::Manual, "Manual"},
@@ -125,7 +160,7 @@ index db45ee4..91b80cb 100644
  bool is_game_thread();
  void submit_rsp_task(RDRAM_ARG PTR(OSTask) task);
 diff --git a/ultramodern/src/events.cpp b/ultramodern/src/events.cpp
-index 46f63f1..3498ed3 100644
+index 46f63f1..f50d7b8 100644
 --- a/ultramodern/src/events.cpp
 +++ b/ultramodern/src/events.cpp
 @@ -1,3 +1,5 @@
@@ -175,7 +210,34 @@ index 46f63f1..3498ed3 100644
  }
  
  void task_thread_func(uint8_t* rdram, moodycamel::LightweightSemaphore* thread_ready) {
-@@ -363,12 +371,24 @@ void gfx_thread_func(uint8_t* rdram, moodycamel::LightweightSemaphore* thread_re
+@@ -331,6 +339,26 @@ void gfx_thread_func(uint8_t* rdram, moodycamel::LightweightSemaphore* thread_re
+ 
+     auto renderer_context = ultramodern::renderer::create_render_context(rdram, window_handle, ultramodern::renderer::get_graphics_config().developer_mode);
+ 
++    // Mario Tennis: if the chosen graphics API (DirectX 12 or Vulkan) can't start, switch to the other one instead of
++    // failing, since the settings menu needs a working renderer to change it back.
++    {
++        using ultramodern::renderer::GraphicsApi;
++        const GraphicsApi chosen = ultramodern::renderer::get_graphics_config().api_option;
++        if (!renderer_context->valid() && (chosen == GraphicsApi::D3D12 || chosen == GraphicsApi::Vulkan)) {
++            const GraphicsApi other = (chosen == GraphicsApi::D3D12) ? GraphicsApi::Vulkan : GraphicsApi::D3D12;
++            renderer_context.reset();
++            auto fallback_config = ultramodern::renderer::get_graphics_config();
++            fallback_config.api_option = other;
++            ultramodern::renderer::set_graphics_config(fallback_config);
++            renderer_context = ultramodern::renderer::create_render_context(rdram, window_handle, fallback_config.developer_mode);
++            if (renderer_context->valid()) {
++                ultramodern::error_handling::message_box((ultramodern::renderer::get_graphics_api_name(chosen) +
++                    " could not be started on this PC, so the game is using " + ultramodern::renderer::get_graphics_api_name(other) +
++                    " instead. The Graphics API setting has been changed to match.").c_str());
++            }
++        }
++    }
++
+     renderer_chosen_api.store(renderer_context->get_chosen_api());
+     if (!renderer_context->valid()) {
+         renderer_setup_result.store(renderer_context->get_setup_result());
+@@ -363,12 +391,24 @@ void gfx_thread_func(uint8_t* rdram, moodycamel::LightweightSemaphore* thread_re
                  // start another graphics task until the RDP is also complete. Games usually preserve the RSP inputs until the RDP
                  // is finished as well, so sending this early shouldn't be an issue in most cases.
                  // If this causes issues then the logic can be replaced with responding to yield requests.

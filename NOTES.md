@@ -68,7 +68,7 @@ screenshots (`-NoAutostart` for the launcher).
 ### How to build / run
 - `sh tools/recompile.sh` — regenerates `include/recomp.h`, symbols, spin hooks, RecompiledFuncs,
   `rsp/aspMain.cpp` from the ROM (`MT_CONFIG=mt.trace.toml` for a trace build; see below).
-- `toolsuild_game.bat` — clang-cl 19.1.7 + Ninja build → `build\MarioTennisRecompiled.exe`
+- `tools\build_game.bat` — clang-cl 19.1.7 + Ninja build → `build\MarioTennisRecompiled.exe`
   (run with the project folder as working directory so `assets\` is found).
 - Env switches: `MT_AUTOSTART=1` (skip the launcher), `MT_LOG=<file>` (stdout/stderr to file),
   `MT_LOG_LOADS=1` (log data-file loads too).
@@ -250,3 +250,27 @@ task from mt_fixup_gfx_task). The camera block itself is untouched, so screen-sp
 (func_800349EC / func_80034838: sprites, markers) is unchanged. Verified at 1680x720 (21:9) in the
 clay-court demo: the Bob-omb row on the sideline now runs to the window edge (the baseline dropped it
 outside the 4:3 area). MT_PROF late frames 16 vs 17 (baseline) over 20-130 s of demos.
+
+## Graphics API option and Slang shaders (2026-11-08)
+- Settings → Graphics → **Graphics API**: DirectX 12 (default on Windows) or Vulkan; takes effect on the next
+  start. Old "Auto"/"Metal" values load as the platform default (`src/game/config.cpp`). If the chosen API can't
+  start, `gfx_thread_func` (ultramodern events.cpp) retries with the other one and shows a message.
+  RT64 has no OpenGL backend (D3D12, Vulkan, Metal only).
+- Settings → Graphics → **Shader**: Off / CRT-Royale / CRT-Royale Fast (fake bloom) / CRT-Lottes; applied on
+  Apply (`set_application_user_config` → `RT64::mtSetShaderPreset`). Presets live in `slang-shaders/` (copied
+  next to the exe; not `shaders/`, which holds the UI's HLSL). The two CRT-Royale presets point their blur
+  passes at `../blurs/blur9fast-*.slang`.
+- Runtime: librashader 0.12.1 (`librashader.dll`, built from source; loaded with `librashader_ld.h`, so the game
+  runs without it). `src/rt64ext/rt64_mt_shader.cpp` is compiled into rt64 (CMakeLists `target_sources`) to reach
+  the native objects; RT64's `PresentQueue::threadPresent` draws the VI output into a 240-line BGRA image with the
+  window's aspect (VIRenderer `targetWidth/Height`), runs the filter chain onto the swap chain, then draws the UI.
+  Chains are created deferred (uploads recorded into RT64's command list; librashader never submits). After a
+  frame the D3D12/Vulkan command list's cached heaps / pipeline layouts / framebuffer are reset so RT64 rebinds.
+- Vulkan bug found: RT64's swap chain textures never set `VulkanTexture::imageFormat` (VK_FORMAT_UNDEFINED), so
+  librashader built a render pass for an undefined format and NVIDIA's driver divided by zero
+  (`nvoglv64.dll`). Fixed in rt64_vulkan.cpp. Render-pass mode is used (RT64's device is Vulkan 1.2 without
+  dynamic rendering).
+- Timing (2 min of demos, late frames): CRT-Royale D3D12 13, Vulkan 8; Royale Fast 4; Lottes 2.
+- Diagnostics: `MT_SHADER=<preset>` overrides the menu; `MT_SHADER_TEST=1` builds the chain without drawing,
+  `=2` skips librashader. Crash reports now name the module and print the call stack (dbghelp; librashader's
+  symbols need its .pdb renamed to `librashader_capi.pdb`).

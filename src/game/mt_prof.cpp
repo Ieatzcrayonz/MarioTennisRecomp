@@ -239,6 +239,50 @@ extern "C" void mt_print_game_stack(const void* pc, const void* sp, size_t bytes
     }
 }
 
+// Crash reports: print the faulting thread's call stack with module and function names (symbols come from
+// .pdb files next to the exe and DLLs, e.g. MarioTennisRecompiled.pdb and librashader.pdb).
+void mt_print_crash_stack(void* context_record) {
+    HANDLE process = GetCurrentProcess();
+    static bool sym_ready = false;
+    if (!sym_ready) {
+        SymSetOptions(SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS);
+        SymInitialize(process, nullptr, TRUE);
+        sym_ready = true;
+    }
+    CONTEXT ctx = *static_cast<CONTEXT*>(context_record);
+    STACKFRAME64 frame{};
+    frame.AddrPC.Offset = ctx.Rip; frame.AddrPC.Mode = AddrModeFlat;
+    frame.AddrFrame.Offset = ctx.Rbp; frame.AddrFrame.Mode = AddrModeFlat;
+    frame.AddrStack.Offset = ctx.Rsp; frame.AddrStack.Mode = AddrModeFlat;
+    for (int depth = 0; depth < 32; depth++) {
+        if (!StackWalk64(IMAGE_FILE_MACHINE_AMD64, process, GetCurrentThread(), &frame, &ctx, nullptr, SymFunctionTableAccess64, SymGetModuleBase64, nullptr)) break;
+        const DWORD64 pc = frame.AddrPC.Offset;
+        if (pc == 0) break;
+        char module_path[MAX_PATH] = "?";
+        HMODULE module = nullptr;
+        if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT, (LPCWSTR)pc, &module)) {
+            GetModuleFileNameA(module, module_path, MAX_PATH);
+        }
+        const char* module_name = strrchr(module_path, '\\') ? strrchr(module_path, '\\') + 1 : module_path;
+        alignas(SYMBOL_INFO) char buf[sizeof(SYMBOL_INFO) + 256];
+        SYMBOL_INFO* sym = reinterpret_cast<SYMBOL_INFO*>(buf);
+        sym->SizeOfStruct = sizeof(SYMBOL_INFO); sym->MaxNameLen = 255;
+        DWORD64 disp = 0;
+        uintptr_t game_offset = 0;
+        const char* game_name = mt_live_describe(reinterpret_cast<void*>(pc), &game_offset);
+        if (game_name != nullptr) {
+            fprintf(stderr, "[mt]   at game code %s+0x%llX\n", game_name, (unsigned long long)game_offset);
+        }
+        else if (SymFromAddr(process, pc, &disp, sym)) {
+            fprintf(stderr, "[mt]   at %s!%s+0x%llX\n", module_name, sym->Name, (unsigned long long)disp);
+        }
+        else {
+            fprintf(stderr, "[mt]   at %s+0x%llX\n", module_name, (unsigned long long)(pc - (DWORD64)(uintptr_t)module));
+        }
+    }
+    fflush(stderr);
+}
+
 void mt_dump_all_stacks() {
     static bool sym_ready = false;
     HANDLE process = GetCurrentProcess();

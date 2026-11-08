@@ -7,6 +7,7 @@
 #define HLSL_CPU
 #include "hle/rt64_application.h"
 #include "render/rt64_vi_renderer.h"
+#include "rt64_mt_shader.h"
 #include "rt64_render_hooks.h"
 #include "overloaded.h"
 
@@ -130,7 +131,19 @@ RT64::UserConfiguration::InternalColorFormat to_rt64(ultramodern::renderer::High
     }
 }
 
+// Mario Tennis recomp: shader presets shipped in the shaders/ folder next to the exe (the game runs from there).
+static const char* shader_preset_path(ultramodern::renderer::ShaderOption option) {
+    switch (option) {
+        case ultramodern::renderer::ShaderOption::CrtRoyale:     return "slang-shaders/crt/crt-royale.slangp";
+        case ultramodern::renderer::ShaderOption::CrtRoyaleFast: return "slang-shaders/crt/crt-royale-fake-bloom.slangp";
+        case ultramodern::renderer::ShaderOption::CrtLottes:     return "slang-shaders/crt/crt-lottes.slangp";
+        default:                                                 return "";
+    }
+}
+
 void set_application_user_config(RT64::Application* application, const ultramodern::renderer::GraphicsConfig& config) {
+    RT64::mtSetShaderPreset(shader_preset_path(config.shader_option));
+
     switch (config.res_option) {
         default:
         case ultramodern::renderer::Resolution::Auto:

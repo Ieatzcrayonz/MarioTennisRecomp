@@ -6,4 +6,6 @@ cd /d F:\Recomps\MarioTennisRecomp
 if not exist build-live\build.ninja (
   cmake -S . -B build-live -G Ninja -DMT_LIVE_RECOMP=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl -DCMAKE_MAKE_PROGRAM=ninja || exit /b 1
 )
+rem librashader.dll (Slang shaders) built from F:\Recomps\src\librashader with "cargo xtask build --profile release".
+if exist F:\Recomps\src\librashader\target\release\librashader.dll cmake -S . -B build-live -DLIBRASHADER_DLL=F:/Recomps/src/librashader/target/release/librashader.dll >nul
 cmake --build build-live --target MarioTennisRecompiled -- -k 0 || exit /b 1

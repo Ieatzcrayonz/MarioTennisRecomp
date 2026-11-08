@@ -624,6 +624,9 @@ public:
         bind_option(constructor, "hr_option", &new_options.hr_option);
         bind_option(constructor, "msaa_option", &new_options.msaa_option);
         bind_option(constructor, "rr_option", &new_options.rr_option);
+        // Mario Tennis recomp: renderer backend (takes effect on the next start).
+        bind_option(constructor, "api_option", &new_options.api_option);
+        bind_option(constructor, "shader_option", &new_options.shader_option);
         constructor.BindFunc("rr_manual_value",
             [](Rml::Variant& out) {
                 out = new_options.rr_manual_value;

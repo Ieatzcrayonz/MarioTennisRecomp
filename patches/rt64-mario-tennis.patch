@@ -75,6 +75,103 @@ index dccaa87..d4a7869 100644
          state->dlCpuProfiler.end();
      }
  };
+diff --git a/src/hle/rt64_present_queue.cpp b/src/hle/rt64_present_queue.cpp
+index 8579695..dbaaf7b 100644
+--- a/src/hle/rt64_present_queue.cpp
++++ b/src/hle/rt64_present_queue.cpp
+@@ -4,6 +4,10 @@
+ 
+ #include "rt64_present_queue.h"
+ 
++#include <algorithm>
++#include <cmath>
++#include <iterator>
++
+ #include "common/rt64_thread.h"
+ #include "rhi/rt64_render_hooks.h"
+ 
+@@ -337,12 +341,52 @@ namespace RT64 {
+                     }
+                 }
+                 
+-                commandList->setFramebuffer(swapChainFramebuffer);
+-                commandList->clearColor();
++                // Mario Tennis recomp: with a Slang shader selected, lay the game picture out at 240 lines (the N64's
++                // scanline count, which CRT shaders key on) in an image with the window's aspect ratio, then let
++                // librashader draw it onto the window. Menus are drawn on top afterwards, unfiltered.
++                bool mtShaded = false;
++                if ((renderParams.texture != nullptr) && mtShader.wanted()) {
++                    const uint32_t windowWidth = ext.swapChain->getWidth();
++                    const uint32_t windowHeight = std::max(ext.swapChain->getHeight(), 1U);
++                    const uint32_t sourceHeight = 240;
++                    const uint32_t sourceWidth = std::max(uint32_t(std::lround(double(sourceHeight) * windowWidth / windowHeight)), 1U);
++                    if ((mtShaderSource == nullptr) || (mtShaderSourceWidth != sourceWidth) || (mtShaderSourceHeight != sourceHeight)) {
++                        // The previous frame's command list has finished (the worker waits on it), so this is safe.
++                        mtShaderSourceFramebuffer.reset();
++                        mtShaderSource = ext.device->createTexture(RenderTextureDesc::ColorTarget(sourceWidth, sourceHeight, RenderFormat::B8G8R8A8_UNORM));
++                        const RenderTexture *sourceTexture = mtShaderSource.get();
++                        mtShaderSourceFramebuffer = ext.device->createFramebuffer(RenderFramebufferDesc(&sourceTexture, 1));
++                        mtShaderSourceWidth = sourceWidth;
++                        mtShaderSourceHeight = sourceHeight;
++                    }
+ 
+-                if (renderParams.texture != nullptr) {
++                    commandList->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(mtShaderSource.get(), RenderTextureLayout::COLOR_WRITE));
++                    commandList->setFramebuffer(mtShaderSourceFramebuffer.get());
++                    commandList->clearColor();
+                     commandList->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(renderParams.texture, RenderTextureLayout::SHADER_READ));
+-                    viRenderer->render(renderParams);
++                    VIRenderer::RenderParams sourceParams = renderParams;
++                    sourceParams.targetWidth = sourceWidth;
++                    sourceParams.targetHeight = sourceHeight;
++                    viRenderer->render(sourceParams);
++
++                    const RenderTextureBarrier shaderBarriers[] = {
++                        RenderTextureBarrier(mtShaderSource.get(), RenderTextureLayout::SHADER_READ),
++                        RenderTextureBarrier(swapChainTexture, RenderTextureLayout::COLOR_WRITE)
++                    };
++
++                    commandList->barriers(RenderBarrierStage::GRAPHICS, shaderBarriers, uint32_t(std::size(shaderBarriers)));
++                    mtShaded = mtShader.apply(ext.device, commandList, mtShaderSource.get(), sourceWidth, sourceHeight, swapChainTexture, windowWidth, windowHeight);
++                    commandList->setFramebuffer(swapChainFramebuffer);
++                }
++
++                if (!mtShaded) {
++                    commandList->setFramebuffer(swapChainFramebuffer);
++                    commandList->clearColor();
++
++                    if (renderParams.texture != nullptr) {
++                        commandList->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(renderParams.texture, RenderTextureLayout::SHADER_READ));
++                        viRenderer->render(renderParams);
++                    }
+                 }
+ 
+                 RenderHookDraw *drawHook = GetRenderHookDraw();
+diff --git a/src/hle/rt64_present_queue.h b/src/hle/rt64_present_queue.h
+index 7bec992..fd2c0c0 100644
+--- a/src/hle/rt64_present_queue.h
++++ b/src/hle/rt64_present_queue.h
+@@ -11,6 +11,7 @@
+ #include "rt64_application_window.h"
+ #include "rt64_present.h"
+ #include "rt64_shared_queue_resources.h"
++#include "rt64_mt_shader.h"
+ 
+ #define PRESENT_QUEUE_SIZE 4
+ 
+@@ -52,6 +53,12 @@ namespace RT64 {
+         std::unique_ptr<RenderCommandSemaphore> acquiredSemaphore;
+         std::unique_ptr<RenderCommandSemaphore> drawSemaphore;
+         std::unique_ptr<VIRenderer> viRenderer;
++        // Mario Tennis recomp: optional Slang shader (librashader) and its low-resolution source image.
++        MtShaderPass mtShader;
++        std::unique_ptr<RenderTexture> mtShaderSource;
++        std::unique_ptr<RenderFramebuffer> mtShaderSourceFramebuffer;
++        uint32_t mtShaderSourceWidth = 0;
++        uint32_t mtShaderSourceHeight = 0;
+         std::unique_ptr<Inspector> inspector;
+         ProfilingTimer presentProfiler = ProfilingTimer(120);
+         Timestamp presentTimestamp;
 diff --git a/src/hle/rt64_rdp.cpp b/src/hle/rt64_rdp.cpp
 index c852a16..a68aaa5 100644
 --- a/src/hle/rt64_rdp.cpp
@@ -627,7 +724,7 @@ index c4cf1bf..be72f26 100644
                              if ((proj.type == Projection::Type::Perspective) || (proj.type == Projection::Type::Orthographic)) {
                                  instanceDrawCallVector[vertexTestZCallIndex].vertexTestZ.indexCount += call.callDesc.triangleCount * 3;
 diff --git a/src/render/rt64_vi_renderer.cpp b/src/render/rt64_vi_renderer.cpp
-index d597d75..45bd03b 100644
+index d597d75..e946e0e 100644
 --- a/src/render/rt64_vi_renderer.cpp
 +++ b/src/render/rt64_vi_renderer.cpp
 @@ -10,6 +10,10 @@
@@ -653,6 +750,33 @@ index d597d75..45bd03b 100644
          // Window is wider than virtual HD TV, we do pillarboxing.
          float relativeScale;
          if ((windowSize.x / windowSize.y) > (hdSize.x / hdSize.y)) {
+@@ -70,7 +79,7 @@ namespace RT64 {
+         RenderViewport viewport;
+         RenderRect scissor;
+         hlslpp::float2 fbHdRegion;
+-        getViewportAndScissor(p.swapChain, *p.vi, p.resolutionScale, p.downsamplingScale, viewport, scissor, fbHdRegion);
++        getViewportAndScissor(p.swapChain, *p.vi, p.resolutionScale, p.downsamplingScale, viewport, scissor, fbHdRegion, p.targetWidth, p.targetHeight);
+         p.commandList->setViewports(viewport);
+         p.commandList->setScissors(scissor);
+ 
+@@ -87,7 +96,7 @@ namespace RT64 {
+         p.commandList->drawInstanced(3, 1, 0, 0);
+     }
+ 
+-    void VIRenderer::getViewportAndScissor(const RenderSwapChain *swapChain, const VI &vi, hlslpp::float2 resolutionScale, uint32_t downsamplingScale, RenderViewport &viewport, RenderRect &scissor, hlslpp::float2 &fbHdRegion) {
++    void VIRenderer::getViewportAndScissor(const RenderSwapChain *swapChain, const VI &vi, hlslpp::float2 resolutionScale, uint32_t downsamplingScale, RenderViewport &viewport, RenderRect &scissor, hlslpp::float2 &fbHdRegion, uint32_t targetWidth, uint32_t targetHeight) {
+         // We define three different coordinate spaces to work with to translate the VI parameters into the Window.
+         //
+         // VideoSD: This corresponds to the SD TV Scanline space, which is what the VI natively works on.
+@@ -103,7 +112,7 @@ namespace RT64 {
+         // specified by the VI.
+         const hlslpp::float2 sdSize = { float(VI::Width), float(VI::Height) };
+         const hlslpp::float2 hdSize = computeHDSize(sdSize, resolutionScale, downsamplingScale);
+-        const hlslpp::float2 windowSize = { float(swapChain->getWidth()), float(swapChain->getHeight()) };
++        const hlslpp::float2 windowSize = (targetWidth > 0) ? hlslpp::float2(float(targetWidth), float(targetHeight)) : hlslpp::float2(float(swapChain->getWidth()), float(swapChain->getHeight()));
+         const hlslpp::uint2 fbSize = vi.fbSize();
+         const hlslpp::float2 fbSdRegion = { float(fbSize.x), float(fbSize.y) };
+         fbHdRegion = computeHDSize(fbSdRegion, resolutionScale, downsamplingScale);
 @@ -124,5 +133,20 @@ namespace RT64 {
  
          viewport = RenderViewport(topLeftViewport.x, topLeftViewport.y, bottomRightViewport.x - topLeftViewport.x, bottomRightViewport.y - topLeftViewport.y);
@@ -677,7 +801,7 @@ index d597d75..45bd03b 100644
 +    RT64::VIRenderer::cropRight.store(right);
 +}
 diff --git a/src/render/rt64_vi_renderer.h b/src/render/rt64_vi_renderer.h
-index 9e83151..f090399 100644
+index 9e83151..b383396 100644
 --- a/src/render/rt64_vi_renderer.h
 +++ b/src/render/rt64_vi_renderer.h
 @@ -4,6 +4,8 @@
@@ -689,10 +813,20 @@ index 9e83151..f090399 100644
  #include "common/rt64_user_configuration.h"
  #include "hle/rt64_vi.h"
  
-@@ -33,6 +35,13 @@ namespace RT64 {
+@@ -28,11 +30,22 @@ namespace RT64 {
+             uint32_t textureHeight = 0;
+             UserConfiguration::Filtering filtering = UserConfiguration::Filtering::Linear;
+             const VI *vi = nullptr;
++            // Mario Tennis recomp: when non-zero, lay the picture out for a target of this size instead of the
++            // swap chain (the low-resolution source image for a Slang shader).
++            uint32_t targetWidth = 0;
++            uint32_t targetHeight = 0;
+         };
+ 
          VIRenderer();
          ~VIRenderer();
          void render(const RenderParams &p);
+-        static void getViewportAndScissor(const RenderSwapChain *swapChain, const VI &vi, hlslpp::float2 resolutionScale, uint32_t downsamplingScale, RenderViewport &viewport, RenderRect &scissor, hlslpp::float2 &fbHdRegion);
 +        // Mario Tennis recomp: scale the picture to fill the window, ignoring its aspect ratio.
 +        static bool stretchToWindow;
 +        // Mario Tennis recomp: with stretchToWindow, only this horizontal fraction of the picture
@@ -700,7 +834,19 @@ index 9e83151..f090399 100644
 +        // the game glue through rt64_set_horizontal_crop().
 +        static std::atomic<float> cropLeft, cropRight;
 +
-         static void getViewportAndScissor(const RenderSwapChain *swapChain, const VI &vi, hlslpp::float2 resolutionScale, uint32_t downsamplingScale, RenderViewport &viewport, RenderRect &scissor, hlslpp::float2 &fbHdRegion);
++        static void getViewportAndScissor(const RenderSwapChain *swapChain, const VI &vi, hlslpp::float2 resolutionScale, uint32_t downsamplingScale, RenderViewport &viewport, RenderRect &scissor, hlslpp::float2 &fbHdRegion, uint32_t targetWidth = 0, uint32_t targetHeight = 0);
      };
  };
 \ No newline at end of file
+diff --git a/src/vulkan/rt64_vulkan.cpp b/src/vulkan/rt64_vulkan.cpp
+index c814269..6ac9dc1 100644
+--- a/src/vulkan/rt64_vulkan.cpp
++++ b/src/vulkan/rt64_vulkan.cpp
+@@ -2230,6 +2230,7 @@ namespace RT64 {
+             textures[i].desc.flags = RenderTextureFlag::RENDER_TARGET;
+             textures[i].fillSubresourceRange();
+             textures[i].createImageView(pickedSurfaceFormat.format);
++            textures[i].imageFormat = pickedSurfaceFormat.format; // Mario Tennis recomp: needed by librashader (Slang shaders).
+         }
+ 
+         return true;

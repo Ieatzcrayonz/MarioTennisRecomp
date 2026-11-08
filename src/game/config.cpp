@@ -25,7 +25,12 @@ constexpr std::u8string_view sound_filename = u8"sound.json";
 
 constexpr auto res_default            = ultramodern::renderer::Resolution::Auto;
 constexpr auto hr_default             = ultramodern::renderer::HUDRatioMode::Clamp16x9;
-constexpr auto api_default            = ultramodern::renderer::GraphicsApi::Auto;
+// Mario Tennis recomp: the menu offers DirectX 12 and Vulkan only (no Auto); DirectX 12 is the default on Windows.
+#ifdef _WIN32
+constexpr auto api_default            = ultramodern::renderer::GraphicsApi::D3D12;
+#else
+constexpr auto api_default            = ultramodern::renderer::GraphicsApi::Vulkan;
+#endif
 constexpr auto ar_default             = ultramodern::renderer::AspectRatio::Expand;
 constexpr auto msaa_default           = ultramodern::renderer::Antialiasing::MSAA2X;
 // Mario Tennis recomp: Original (30 fps). Display interpolation makes the player hitch on every swing
@@ -104,6 +109,7 @@ namespace ultramodern {
             {"hpfb_option",     config.hpfb_option},
             {"rr_manual_value", config.rr_manual_value},
             {"developer_mode",  config.developer_mode},
+            {"shader_option",   config.shader_option},
         };
     }
 
@@ -112,6 +118,10 @@ namespace ultramodern {
         config.wm_option        = from_or_default(j, "wm_option",       wm_default());
         config.hr_option        = from_or_default(j, "hr_option",       hr_default);
         config.api_option       = from_or_default(j, "api_option",      api_default);
+        // Older settings may say Auto (or Metal on a PC): show and use the platform default instead.
+        if (config.api_option != ultramodern::renderer::GraphicsApi::D3D12 && config.api_option != ultramodern::renderer::GraphicsApi::Vulkan) {
+            config.api_option = api_default;
+        }
         config.ds_option        = from_or_default(j, "ds_option",       ds_default);
         config.ar_option        = from_or_default(j, "ar_option",       ar_default);
         config.msaa_option      = from_or_default(j, "msaa_option",     msaa_default);
@@ -119,6 +129,7 @@ namespace ultramodern {
         config.hpfb_option      = from_or_default(j, "hpfb_option",     hpfb_default);
         config.rr_manual_value  = from_or_default(j, "rr_manual_value", rr_manual_default);
         config.developer_mode   = from_or_default(j, "developer_mode",  developer_mode_default);
+        config.shader_option    = from_or_default(j, "shader_option",   ultramodern::renderer::ShaderOption::Off);
     }
 }
 
