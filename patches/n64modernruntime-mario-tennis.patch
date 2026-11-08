@@ -111,3 +111,179 @@ index a8cd8e0..9674b04 100644
          });
  
          NLOHMANN_JSON_SERIALIZE_ENUM(ultramodern::renderer::Antialiasing, {
+diff --git a/ultramodern/include/ultramodern/ultramodern.hpp b/ultramodern/include/ultramodern/ultramodern.hpp
+index db45ee4..91b80cb 100644
+--- a/ultramodern/include/ultramodern/ultramodern.hpp
++++ b/ultramodern/include/ultramodern/ultramodern.hpp
+@@ -74,6 +74,8 @@ enum class ThreadPriority {
+ void set_native_thread_name(const std::string& name);
+ void set_native_thread_priority(ThreadPriority pri);
+ PTR(OSThread) this_thread();
++// Queue a message from a non-game thread that is retried, not dropped, while the queue is full.
++void enqueue_external_message_keep(PTR(OSMesgQueue) mq, OSMesg msg);
+ void set_main_thread();
+ bool is_game_thread();
+ void submit_rsp_task(RDRAM_ARG PTR(OSTask) task);
+diff --git a/ultramodern/src/events.cpp b/ultramodern/src/events.cpp
+index 46f63f1..13490fb 100644
+--- a/ultramodern/src/events.cpp
++++ b/ultramodern/src/events.cpp
+@@ -1,3 +1,5 @@
++#include <cstdlib>
++#include <cstdio>
+ #include <thread>
+ #include <atomic>
+ #include <chrono>
+@@ -137,6 +139,7 @@ ultramodern::renderer::ViRegs* ultramodern::renderer::get_vi_regs() {
+ }
+ 
+ extern "C" void osSetEventMesg(RDRAM_ARG OSEvent event_id, PTR(OSMesgQueue) mq_, OSMesg msg) {
++    if (std::getenv("MT_PROF")) fprintf(stderr, "[prof] osSetEventMesg event %u -> mq %08X\n", (unsigned)event_id, (uint32_t)mq_);
+     std::lock_guard lock{ events_context.message_mutex };
+ 
+     switch (event_id) {
+@@ -159,6 +162,7 @@ extern "C" void osSetEventMesg(RDRAM_ARG OSEvent event_id, PTR(OSMesgQueue) mq_,
+ }
+ 
+ extern "C" void osViSetEvent(RDRAM_ARG PTR(OSMesgQueue) mq_, OSMesg msg, u32 retrace_count) {
++    if (std::getenv("MT_PROF")) fprintf(stderr, "[prof] osViSetEvent -> mq %08X\n", (uint32_t)mq_);
+     std::lock_guard lock{ events_context.message_mutex };
+     ViState* next_state = events_context.vi.get_next_state();
+     next_state->mq = mq_;
+@@ -250,16 +254,20 @@ void vi_thread_func() {
+     }
+ }
+ 
++// Task completions are never dropped (see enqueue_external_message_keep). These run on the SP task and
++// graphics threads, never on a game thread, so osSendMesg would only queue them as external messages.
+ void sp_complete() {
+-    uint8_t* rdram = events_context.rdram;
+     std::lock_guard lock{ events_context.message_mutex };
+-    osSendMesg(PASS_RDRAM events_context.sp.mq, events_context.sp.msg, OS_MESG_NOBLOCK);
++    if (events_context.sp.mq != NULLPTR) {
++        ultramodern::enqueue_external_message_keep(events_context.sp.mq, events_context.sp.msg);
++    }
+ }
+ 
+ void dp_complete() {
+-    uint8_t* rdram = events_context.rdram;
+     std::lock_guard lock{ events_context.message_mutex };
+-    osSendMesg(PASS_RDRAM events_context.dp.mq, events_context.dp.msg, OS_MESG_NOBLOCK);
++    if (events_context.dp.mq != NULLPTR) {
++        ultramodern::enqueue_external_message_keep(events_context.dp.mq, events_context.dp.msg);
++    }
+ }
+ 
+ void task_thread_func(uint8_t* rdram, moodycamel::LightweightSemaphore* thread_ready) {
+@@ -369,6 +377,14 @@ void gfx_thread_func(uint8_t* rdram, moodycamel::LightweightSemaphore* thread_re
+                 [[maybe_unused]] auto renderer_start = std::chrono::high_resolution_clock::now();
+                 renderer_context->send_dl(&task_action->task);
+                 [[maybe_unused]] auto renderer_end = std::chrono::high_resolution_clock::now();
++                {
++                    static const bool prof = std::getenv("MT_PROF") != nullptr;
++                    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(renderer_end - renderer_start).count();
++                    if (prof && ms > 200) {
++                        fprintf(stderr, "[prof] renderer took %lld ms for one display list (data_ptr %08X)\n",
++                            (long long)ms, (uint32_t)task_action->task.t.data_ptr);
++                    }
++                }
+                 dp_complete();
+                 // printf("Renderer ProcessDList time: %d us\n", static_cast<u32>(std::chrono::duration_cast<std::chrono::microseconds>(renderer_end - renderer_start).count()));
+             }
+diff --git a/ultramodern/src/mesgqueue.cpp b/ultramodern/src/mesgqueue.cpp
+index 6f38e02..09afd36 100644
+--- a/ultramodern/src/mesgqueue.cpp
++++ b/ultramodern/src/mesgqueue.cpp
+@@ -9,6 +9,7 @@ struct QueuedMessage {
+     PTR(OSMesgQueue) mq;
+     OSMesg mesg;
+     bool jam;
++    bool keep = false; // retry instead of dropping when the queue is full
+ };
+ 
+ static moodycamel::BlockingConcurrentQueue<QueuedMessage> external_messages {};
+@@ -17,25 +18,43 @@ void enqueue_external_message(PTR(OSMesgQueue) mq, OSMesg msg, bool jam) {
+     external_messages.enqueue({mq, msg, jam});
+ }
+ 
++// SP/DP task completions: the audio and graphics task threads run concurrently (real hardware runs one
++// RSP task at a time), so two completions can arrive while the game's queue still holds one. Those must
++// not be dropped like a missed VI retrace, or the game waits forever for a task that already finished.
++void ultramodern::enqueue_external_message_keep(PTR(OSMesgQueue) mq, OSMesg msg) {
++    external_messages.enqueue({mq, msg, false, true});
++}
++
+ bool do_send(RDRAM_ARG PTR(OSMesgQueue) mq_, OSMesg msg, bool jam, bool block);
+ 
+ void dequeue_external_messages(RDRAM_ARG1) {
+     QueuedMessage to_send;
++    QueuedMessage retry[16];
++    size_t num_retry = 0;
+     while (external_messages.try_dequeue(to_send)) {
+-        do_send(PASS_RDRAM to_send.mq, to_send.mesg, to_send.jam, false);
++        if (!do_send(PASS_RDRAM to_send.mq, to_send.mesg, to_send.jam, false) && to_send.keep && num_retry < 16) {
++            retry[num_retry++] = to_send;
++        }
++    }
++    for (size_t i = 0; i < num_retry; i++) {
++        external_messages.enqueue(retry[i]);
+     }
+ }
+ 
+ void ultramodern::wait_for_external_message(RDRAM_ARG1) {
+     QueuedMessage to_send;
+     external_messages.wait_dequeue(to_send);
+-    do_send(PASS_RDRAM to_send.mq, to_send.mesg, to_send.jam, false);
++    if (!do_send(PASS_RDRAM to_send.mq, to_send.mesg, to_send.jam, false) && to_send.keep) {
++        external_messages.enqueue(to_send);
++    }
+ }
+ 
+ void ultramodern::wait_for_external_message_timed(RDRAM_ARG1, u32 millis) {
+     QueuedMessage to_send;
+     if (external_messages.wait_dequeue_timed(to_send, std::chrono::milliseconds{millis})) {
+-        do_send(PASS_RDRAM to_send.mq, to_send.mesg, to_send.jam, false);
++        if (!do_send(PASS_RDRAM to_send.mq, to_send.mesg, to_send.jam, false) && to_send.keep) {
++            external_messages.enqueue(to_send);
++        }
+     }
+ }
+ 
+@@ -109,11 +128,14 @@ bool do_recv(RDRAM_ARG PTR(OSMesgQueue) mq_, PTR(OSMesg) msg_, bool block) {
+         }
+     } else {
+         // Otherwise, yield this thread in a loop until the queue is no longer full
++        // Debug aid (MT_PROF watchdog): record the queue this thread blocks on in OSThread::pad2.
++        TO_PTR(OSThread, ultramodern::this_thread())->pad2 = (uint32_t)mq_;
+         while (MQ_IS_EMPTY(mq)) {
+             debug_printf("[Message Queue] Thread %d is blocked on receive\n", TO_PTR(OSThread, ultramodern::this_thread())->id);
+             ultramodern::thread_queue_insert(PASS_RDRAM GET_MEMBER(OSMesgQueue, mq_, blocked_on_recv), ultramodern::this_thread());
+             ultramodern::run_next_thread_and_wait(PASS_RDRAM1);
+         }
++        TO_PTR(OSThread, ultramodern::this_thread())->pad2 = 0;
+     }
+ 
+     if (msg_ != NULLPTR) {
+diff --git a/ultramodern/src/timer.cpp b/ultramodern/src/timer.cpp
+index d36ffcc..86b50e9 100644
+--- a/ultramodern/src/timer.cpp
++++ b/ultramodern/src/timer.cpp
+@@ -1,3 +1,5 @@
++#include <cstdio>
++#include <cstdlib>
+ #include <thread>
+ #include <variant>
+ #include <set>
+@@ -192,6 +194,12 @@ extern "C" int osSetTimer(RDRAM_ARG PTR(OSTimer) t_, OSTime countdown, OSTime in
+     t->mq = mq;
+     t->msg = msg;
+ 
++    static const bool log_timers = std::getenv("MT_LOG_TIMERS") != nullptr;
++    if (log_timers) {
++        fprintf(stderr, "[timer] osSetTimer %08X countdown %.1f ms interval %.1f ms mq %08X msg %08X\n", (uint32_t)t_,
++            ticks_to_duration(countdown).count() / 1000.0, ticks_to_duration(interval).count() / 1000.0, (uint32_t)mq, (uint32_t)msg);
++    }
++
+     timer_context.action_queue.enqueue(AddTimerAction{ t_ });
+ 
+     return 0;

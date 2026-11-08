@@ -2980,8 +2980,20 @@ functions = [
 ]
 
 [[section]]
-name = "win147"
+name = "win108"
 rom = 0x011C05A0
+vram = 0x10000000
+size = 0x10A0
+
+functions = [
+    { name = "func_win108_10000000", vram = 0x10000000, size = 0x8 },
+    { name = "func_win108_10000010", vram = 0x10000010, size = 0x120 },
+    { name = "func_win108_10000130", vram = 0x10000130, size = 0xE8C },
+]
+
+[[section]]
+name = "win147"
+rom = 0x011C1640
 vram = 0x10000000
 size = 0x15A0
 
@@ -2993,7 +3005,7 @@ functions = [
 
 [[section]]
 name = "win163"
-rom = 0x011C1B40
+rom = 0x011C2BE0
 vram = 0x10000000
 size = 0x17E0
 
@@ -3005,7 +3017,7 @@ functions = [
 
 [[section]]
 name = "win178"
-rom = 0x011C3320
+rom = 0x011C43C0
 vram = 0x10000000
 size = 0x1530
 
@@ -3017,7 +3029,7 @@ functions = [
 
 [[section]]
 name = "win200"
-rom = 0x011C4850
+rom = 0x011C58F0
 vram = 0x10000000
 size = 0x1F50
 
@@ -3028,8 +3040,20 @@ functions = [
 ]
 
 [[section]]
+name = "win473"
+rom = 0x011C7840
+vram = 0x10000000
+size = 0x1410
+
+functions = [
+    { name = "func_win473_10000000", vram = 0x10000000, size = 0x8 },
+    { name = "func_win473_10000010", vram = 0x10000010, size = 0x120 },
+    { name = "func_win473_10000130", vram = 0x10000130, size = 0x11F0 },
+]
+
+[[section]]
 name = "win774"
-rom = 0x011C67A0
+rom = 0x011C8C50
 vram = 0x10000000
 size = 0x1410
 
@@ -3041,7 +3065,7 @@ functions = [
 
 [[section]]
 name = "win965"
-rom = 0x011C7BB0
+rom = 0x011CA060
 vram = 0x10000000
 size = 0x1DA0
 
@@ -3053,7 +3077,7 @@ functions = [
 
 [[section]]
 name = "win989"
-rom = 0x011C9950
+rom = 0x011CBE00
 vram = 0x10000000
 size = 0x1490
 
@@ -3061,5 +3085,17 @@ functions = [
     { name = "func_win989_10000000", vram = 0x10000000, size = 0x8 },
     { name = "func_win989_10000010", vram = 0x10000010, size = 0x114 },
     { name = "func_win989_10000124", vram = 0x10000124, size = 0x1298 },
+]
+
+[[section]]
+name = "win1042"
+rom = 0x011CD290
+vram = 0x10000000
+size = 0x1400
+
+functions = [
+    { name = "func_win1042_10000000", vram = 0x10000000, size = 0x8 },
+    { name = "func_win1042_10000010", vram = 0x10000010, size = 0x120 },
+    { name = "func_win1042_10000130", vram = 0x10000130, size = 0x11DC },
 ]
 

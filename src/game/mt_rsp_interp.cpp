@@ -11,6 +11,8 @@
 
 #include <cstdio>
 #include <cstring>
+#include <chrono>
+#include <cstdlib>
 
 #include "recomp.h"
 #include "librecomp/rsp.hpp"
@@ -39,7 +41,7 @@ namespace {
     case 8: X(8); break;  case 9: X(9); break;  case 10: X(10); break; case 11: X(11); break; \
     case 12: X(12); break; case 13: X(13); break; case 14: X(14); break; case 15: X(15); break; }
 
-RspExitReason mt_rsp_interpret(uint8_t* rdram, uint32_t ucode_addr) {
+static RspExitReason interpret_task(uint8_t* rdram, uint32_t ucode_addr) {
     // Load the microcode text into IMEM (cached: the audio task always uses the same microcode).
     uint32_t ucode_size = RSP_MEM_W_LOAD(0x14, 0xFC0);
     if (ucode_size == 0 || ucode_size > 0x1000 - imem_text_start) ucode_size = 0x1000 - imem_text_start;
@@ -263,6 +265,23 @@ RspExitReason mt_rsp_interpret(uint8_t* rdram, uint32_t ucode_addr) {
     }
     std::fprintf(stderr, "[mt] RSP interpreter: task did not finish (pc 0x%03X)\n", pc);
     return RspExitReason::Invalid;
+}
+
+// MT_AUDIO_STATS=1 prints how long audio tasks take in the interpreter.
+RspExitReason mt_rsp_interpret(uint8_t* rdram, uint32_t ucode_addr) {
+    static const bool stats = std::getenv("MT_AUDIO_STATS") != nullptr;
+    if (!stats) return interpret_task(rdram, ucode_addr);
+    static uint64_t tasks = 0;
+    static double total_ms = 0, max_ms = 0;
+    auto t0 = std::chrono::steady_clock::now();
+    RspExitReason r = interpret_task(rdram, ucode_addr);
+    double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    tasks++; total_ms += ms; if (ms > max_ms) max_ms = ms;
+    if (tasks % 300 == 0) {
+        std::fprintf(stderr, "[mt] audio interpreter: %llu tasks, avg %.2f ms, max %.2f ms\n", (unsigned long long)tasks, total_ms / 300, max_ms);
+        total_ms = 0; max_ms = 0;
+    }
+    return r;
 }
 
 #ifndef MT_LIVE_RECOMP

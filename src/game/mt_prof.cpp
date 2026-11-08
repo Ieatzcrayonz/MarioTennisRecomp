@@ -84,3 +84,123 @@ void mt_prof_flush_events(bool print) {
     if (print) for (const Ev& e : events) fprintf(stderr, "[prof]      %9.1f  %s 0x%X\n", e.t, e.what, e.arg);
     events.clear();
 }
+
+// Freeze watchdog (MT_PROF): if no gfx task arrives for 4 s, print every game thread's state and the
+// message queue it is blocked on, so a hang can be traced to what each thread is waiting for.
+#include <mutex>
+#include <thread>
+#include <vector>
+#include "ultramodern/ultramodern.hpp"
+
+extern "C" const char* volatile mt_rt64_phase;
+
+namespace {
+    std::mutex watch_mutex;
+    std::vector<uint32_t> watched_threads;
+    uint8_t* watch_rdram = nullptr;
+
+    uint32_t rd32(uint32_t addr) { return *reinterpret_cast<uint32_t*>(watch_rdram + (addr & 0x1FFFFFFC)); }
+
+    void dump_threads(double stalled_ms) {
+        std::lock_guard lock{ watch_mutex };
+        fprintf(stderr, "[prof] FREEZE? no gfx task for %.0f ms. Renderer last finished step: %s. Game threads:\n", stalled_ms, mt_rt64_phase);
+        for (uint32_t t : watched_threads) {
+            const OSThread* th = reinterpret_cast<const OSThread*>(watch_rdram + (t & 0x1FFFFFFF));
+            uint32_t q = (uint32_t)th->queue;
+            fprintf(stderr, "[prof]   thread %d @%08X pri %d blocked on mq %08X (count %d)", th->id, t, th->priority, th->pad2,
+                    th->pad2 ? (int32_t)rd32(th->pad2 + 8) : 0);
+            q = 0;
+            if (q != 0) {
+                // A blocked thread's queue is &mq->blocked_on_recv (offset 0) or &mq->blocked_on_send (4).
+                fprintf(stderr, " (as recv: count %d/%d; as send: count %d/%d)",
+                    (int32_t)rd32(q + 8), (int32_t)rd32(q + 16), (int32_t)rd32(q + 4), (int32_t)rd32(q + 12));
+            }
+            fprintf(stderr, "\n");
+        }
+        fflush(stderr);
+    }
+}
+
+void mt_dump_all_stacks();
+
+void mt_prof_thread_created(uint8_t* rdram) {
+    if (!enabled) return;
+    {
+        std::lock_guard lock{ watch_mutex };
+        watch_rdram = rdram;
+        watched_threads.push_back((uint32_t)ultramodern::this_thread());
+    }
+    static bool started = false;
+    if (!started) {
+        started = true;
+        std::thread([] {
+            double last_dump = 0;
+            while (true) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                double t = now_ms();
+                if (last_task != 0 && t - last_task > 4000 && t - last_dump > 10000) {
+                    dump_threads(t - last_task);
+                    mt_dump_all_stacks();
+                    last_dump = t;
+                }
+            }
+        }).detach();
+    }
+}
+
+#ifdef _WIN32
+// Freeze watchdog, part 2: print every thread's call stack (symbols from the .pdb next to the exe).
+#define NOMINMAX
+#include <cstring>
+#include <windows.h>
+#include <tlhelp32.h>
+#include <dbghelp.h>
+#pragma comment(lib, "dbghelp.lib")
+
+void mt_dump_all_stacks() {
+    static bool sym_ready = false;
+    HANDLE process = GetCurrentProcess();
+    if (!sym_ready) {
+        SymSetOptions(SYMOPT_LOAD_LINES | SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS);
+        SymInitialize(process, nullptr, TRUE);
+        sym_ready = true;
+    }
+    DWORD self = GetCurrentThreadId();
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+    THREADENTRY32 te{ sizeof(te) };
+    for (BOOL ok = Thread32First(snap, &te); ok; ok = Thread32Next(snap, &te)) {
+        if (te.th32OwnerProcessID != GetCurrentProcessId() || te.th32ThreadID == self) continue;
+        HANDLE th = OpenThread(THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT | THREAD_QUERY_INFORMATION, FALSE, te.th32ThreadID);
+        if (!th) continue;
+        if (SuspendThread(th) != (DWORD)-1) {
+            CONTEXT ctx{}; ctx.ContextFlags = CONTEXT_FULL;
+            if (GetThreadContext(th, &ctx)) {
+                STACKFRAME64 frame{};
+                frame.AddrPC.Offset = ctx.Rip; frame.AddrPC.Mode = AddrModeFlat;
+                frame.AddrFrame.Offset = ctx.Rbp; frame.AddrFrame.Mode = AddrModeFlat;
+                frame.AddrStack.Offset = ctx.Rsp; frame.AddrStack.Mode = AddrModeFlat;
+                char line_buf[2048]; size_t len = 0;
+                bool interesting = false;
+                for (int depth = 0; depth < 14; depth++) {
+                    if (!StackWalk64(IMAGE_FILE_MACHINE_AMD64, process, th, &frame, &ctx, nullptr, SymFunctionTableAccess64, SymGetModuleBase64, nullptr)) break;
+                    alignas(SYMBOL_INFO) char buf[sizeof(SYMBOL_INFO) + 256];
+                    SYMBOL_INFO* sym = reinterpret_cast<SYMBOL_INFO*>(buf);
+                    sym->SizeOfStruct = sizeof(SYMBOL_INFO); sym->MaxNameLen = 255;
+                    DWORD64 disp = 0;
+                    const char* name = SymFromAddr(process, frame.AddrPC.Offset, &disp, sym) ? sym->Name : "?";
+                    if (strstr(name, "RT64") || strstr(name, "render") || strstr(name, "Render")) interesting = true;
+                    len += snprintf(line_buf + len, sizeof(line_buf) - len, "\n[prof]       %s", name);
+                    if (len >= sizeof(line_buf) - 64) break;
+                }
+                if (interesting) fprintf(stderr, "[prof]   host thread %lu:%s\n", te.th32ThreadID, line_buf);
+            }
+            ResumeThread(th);
+        }
+        CloseHandle(th);
+    }
+    CloseHandle(snap);
+    fflush(stderr);
+}
+#else
+void mt_dump_all_stacks() {}
+#endif

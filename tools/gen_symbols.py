@@ -55,10 +55,11 @@ MODULES = [12, 125, 275, 379, 475, 477, 764, 814, 832, 881, 882, 976, 981]
 # to the buffer, while its functions are also registered at 0x5000xxxx for the vector pointers.
 TLB_MODULES = [(209, 0x50000000, 0x8000)]   # (file-table entry, vram, mapped window size)
 
-# Code modules (< 8 KiB, identical entry stub `j 0x10000124`) linked at 0x10000000 and executed
+# Code modules (< 8 KiB, entry stub `j 0x10000124`, or `j 0x10000130` for 108/473/1042 -- used by the
+# title-screen demo) linked at 0x10000000 and executed
 # through seg454's sliding 2x4 KiB TLB window, which maps whichever loaded copy is active.
 TLB_WINDOW_VRAM = 0x10000000
-TLB_WINDOW_MODULES = [17, 33, 99, 100, 101, 102, 103, 104, 105, 106, 147, 163, 178, 200, 774, 965, 989]
+TLB_WINDOW_MODULES = [17, 33, 99, 100, 101, 102, 103, 104, 105, 106, 108, 147, 163, 178, 200, 473, 774, 965, 989, 1042]
 
 MAIN_TEXT = [(0x80031000, 0x8003DA00), (0x80040E60, 0x80049A78)]  # RSP code/ucode sits between
 BOOT_TEXT = (0x80300000, 0x80300344)

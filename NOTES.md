@@ -202,3 +202,17 @@ at its RAM buffer. With the software TLB in place the relocation is belt-and-bra
 - Release package: `release\MarioTennisRecompiled-Windows.zip` (exe, SDL2/dxc DLLs, assets,
   recompcontrollerdb.txt, LICENSE, README.txt). No game code or data. `release/` is git-ignored.
 - Status: user played a full match on the live build. Final package smoke-tested (boots).
+
+## Title-screen demo fixes (v0.1.1, 2026-11-08)
+- Window modules 108, 473, 1042 (entry stub `j 0x10000130`) were missing from gen_symbols.py; the demo
+  uses them ("Failed to find function at 0x8023x000").
+- RT64 `RDP::loadTileOperation`: inverted load tiles (lrt < ult / lrs < uls) wrapped to ~4 billion rows,
+  stalling the renderer 12+ s per frame in replay / smash cut-scene effects (looked like a freeze with
+  music playing). Clamped to the RDP's range. `loadWord` also masks addresses to 24 bits.
+- Runtime: SP/DP task completions are retried instead of dropped when the game's queue is full (audio and
+  graphics tasks complete on separate threads).
+- Diagnostics (all MT_PROF): freeze watchdog prints each game thread's blocked queue and host-thread
+  call stacks (dbghelp + .pdb) after 4 s without a gfx task; RT64 reports slow display lists/fullSync
+  phases; MT_LOG_TIMERS logs osSetTimer. A crash handler always prints the faulting exe offset
+  (`llvm-symbolizer --obj=build\MarioTennisRecompiled.exe --relative-address 0x...`).
+- Known: a black box / green squares in some demo replay and smash cut-scene effects (framebuffer effect).

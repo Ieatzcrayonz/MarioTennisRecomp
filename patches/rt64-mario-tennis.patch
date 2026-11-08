@@ -1,3 +1,296 @@
+diff --git a/src/hle/rt64_interpreter.cpp b/src/hle/rt64_interpreter.cpp
+index dccaa87..d4a7869 100644
+--- a/src/hle/rt64_interpreter.cpp
++++ b/src/hle/rt64_interpreter.cpp
+@@ -1,3 +1,6 @@
++#include <chrono>
++#include <cstdio>
++#include <cstdlib>
+ //
+ // RT64
+ //
+@@ -169,8 +172,17 @@ namespace RT64 {
+         DisplayList *dl = dlStart;
+         uint8_t opCode;
+         GBIFunction func;
++        // Mario Tennis diagnostics (MT_PROF): report display lists that take abnormally long.
++        static const bool mtProf = std::getenv("MT_PROF") != nullptr;
++        auto mtStart = std::chrono::steady_clock::now();
++        uint64_t mtCommands = 0;
++        double mtSlowestMs = 0;
++        uint32_t mtSlowW0 = 0, mtSlowW1 = 0;
+         while (dl != nullptr) {
+             opCode = (dl->w0 >> 24);
++            mtCommands++;
++            const uint32_t mtW0 = dl->w0, mtW1 = dl->w1;
++            auto mtCmdStart = mtProf ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+ 
+             if ((extendedOpCode != 0) && (opCode == extendedOpCode)) {
+                 extendedFunction(state, &dl);
+@@ -190,11 +202,24 @@ namespace RT64 {
+                 }
+             }
+ 
++            if (mtProf) {
++                double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - mtCmdStart).count();
++                if (ms > mtSlowestMs) { mtSlowestMs = ms; mtSlowW0 = mtW0; mtSlowW1 = mtW1; }
++            }
++
+             if (dl != nullptr) {
+                 dl++;
+             }
+         }
+ 
++        if (mtProf) {
++            double totalMs = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - mtStart).count();
++            if (totalMs > 200) {
++                fprintf(stderr, "[prof] RT64 display list: %.0f ms, %llu commands, slowest %.0f ms = %08X %08X\n",
++                    totalMs, (unsigned long long)mtCommands, mtSlowestMs, mtSlowW0, mtSlowW1);
++            }
++        }
++
+         state->dlCpuProfiler.end();
+     }
+ };
+diff --git a/src/hle/rt64_rdp.cpp b/src/hle/rt64_rdp.cpp
+index c852a16..045f76b 100644
+--- a/src/hle/rt64_rdp.cpp
++++ b/src/hle/rt64_rdp.cpp
+@@ -1,3 +1,5 @@
++#include <cstdlib>
++#include <cstdio>
+ //
+ // RT64
+ //
+@@ -224,6 +226,15 @@ namespace RT64 {
+ 
+     constexpr uint32_t ExtendedMask = 0x80000000U;
+ 
++    // Mario Tennis diagnostics (MT_PROF): log RDP image addresses outside the 8 MB of RDRAM.
++    static void mtLogBadAddress(const char *what, uint32_t address, uint32_t width) {
++        static const bool prof = std::getenv("MT_PROF") != nullptr;
++        static int logged = 0;
++        if (prof && ((address & 0xFFFFFF) >= 0x800000) && (logged++ < 40)) {
++            fprintf(stderr, "[prof] RDP %s address %08X (width %u) is outside RDRAM\n", what, address, width);
++        }
++    }
++
+     uint32_t RDP::maskAddress(uint32_t address) {
+         if (state->extended.extendRDRAM && ((address & ExtendedMask) == ExtendedMask)) {
+             return address - ExtendedMask;
+@@ -234,6 +245,7 @@ namespace RT64 {
+     }
+ 
+     void RDP::setColorImage(uint8_t fmt, uint8_t siz, uint16_t width, uint32_t address) {
++        mtLogBadAddress("color image", address, width);
+         // Make sure the new color image is actually different. Some games will set the color image
+         // multiple times despite setting the exact same parameters.
+         const uint32_t newAddress = maskAddress(address);
+@@ -255,6 +267,7 @@ namespace RT64 {
+     }
+ 
+     void RDP::setDepthImage(uint32_t address) {
++        mtLogBadAddress("depth image", address, 0);
+         const uint32_t newAddress = maskAddress(address);
+         if (depthImage.address != newAddress) {
+             depthImage.address = newAddress;
+@@ -267,6 +280,7 @@ namespace RT64 {
+     }
+ 
+     void RDP::setTextureImage(uint8_t fmt, uint8_t siz, uint16_t width, uint32_t address) {
++        mtLogBadAddress("texture image", address, width);
+         texture.fmt = fmt;
+         texture.siz = siz;
+         texture.width = width;
+@@ -349,6 +363,10 @@ namespace RT64 {
+     
+     template<bool RGBA32 = false, bool TLUT = false>
+     __forceinline void loadWord(uint8_t *TMEM, uint32_t tmemAddress, uint32_t tmemXorMask, const uint8_t *RDRAM, uint32_t textureAddress) {
++        // The RDP only decodes 24 address bits; Mario Tennis' title-screen demo issues a texture load
++        // with stray high bits, which real hardware wraps and an unmasked read crashes on.
++        textureAddress &= 0xFFFFFF;
++
+         // Only sample the first two bytes in TLUT mode.
+         uint32_t offsetMask;
+         if constexpr (TLUT) {
+@@ -446,9 +464,15 @@ namespace RT64 {
+         const uint32_t bytesOffset = (loadTile.uls >> 2) << loadTexture.siz >> 1;
+         const uint32_t bytesPerRow = loadTexture.width << loadTexture.siz >> 1;
+         const uint32_t textureStart = loadTexture.address + bytesOffset + bytesPerRow * (loadTile.ult >> 2);
+-        const uint32_t rowCount = 1 + ((loadTile.lrt >> 2) - (loadTile.ult >> 2));
+-        const uint32_t tileWidth = ((loadTile.lrs >> 2) - (loadTile.uls >> 2));
+-        const uint32_t wordsPerRow = (tileWidth >> (4 - loadTile.siz)) + 1;
++        // Inverted tiles (lower-right above/left of upper-left) used to wrap these unsigned differences to
++        // ~4 billion rows/words, stalling the renderer for seconds (Mario Tennis' replay and smash
++        // cut-scene effects). Clamp them: an inverted span loads one row/word, and nothing beyond what the
++        // RDP can address (1024 rows, 4 KiB of TMEM = 512 words per row) is useful since TMEM wraps.
++        const int32_t rowSpan = std::max(int32_t(loadTile.lrt >> 2) - int32_t(loadTile.ult >> 2), 0);
++        const int32_t widthSpan = std::max(int32_t(loadTile.lrs >> 2) - int32_t(loadTile.uls >> 2), 0);
++        const uint32_t rowCount = std::min(uint32_t(rowSpan) + 1, 1024U);
++        const uint32_t tileWidth = uint32_t(widthSpan);
++        const uint32_t wordsPerRow = std::min((tileWidth >> (4 - loadTile.siz)) + 1, 512U);
+         const uint32_t tmemStart = loadTile.tmem << 3;
+         const uint32_t tmemStride = loadTile.line << 3;
+         const uint32_t textureEnd = textureStart + (rowCount - 1) * bytesPerRow + (wordsPerRow << 3);
+diff --git a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
+index 6b0bb31..82c2538 100644
+--- a/src/hle/rt64_state.cpp
++++ b/src/hle/rt64_state.cpp
+@@ -1,3 +1,8 @@
++#include <string_view>
++#include <cstdlib>
++#include <cstdio>
++#include <cstring>
++#include <chrono>
+ //
+ // RT64
+ //
+@@ -27,6 +32,9 @@
+ #define MI_INTR_DP          0x00000020
+ #define MI_INTR_SP          0x00000001
+ 
++// Mario Tennis diagnostics: last completed fullSync step, read by the freeze watchdog (src/game/mt_prof.cpp).
++extern "C" const char* volatile mt_rt64_phase = "idle";
++
+ namespace RT64 {
+     const float ShiftScaleMap[] = {
+         1.0f,
+@@ -737,8 +745,34 @@ namespace RT64 {
+     }
+     
+     void State::fullSync() {
++        // Mario Tennis diagnostics (MT_PROF): time the phases of a slow full sync.
++        static const bool mtProf = std::getenv("MT_PROF") != nullptr;
++        const auto mtStart = std::chrono::steady_clock::now();
++        auto mtLast = mtStart;
++        const char *mtNames[24] = {};
++        double mtTotals[24] = {};
++        int mtCount = 0;
++        mt_rt64_phase = "fullSync start";
++        auto mtMark = [&](const char *name) {
++            mt_rt64_phase = name;
++            if (!mtProf) return;
++            auto now = std::chrono::steady_clock::now();
++            double ms = std::chrono::duration<double, std::milli>(now - mtLast).count();
++            mtLast = now;
++            int i = 0;
++            while (i < mtCount && mtNames[i] != name) i++;
++            if (i == mtCount && mtCount < 24) { mtNames[mtCount++] = name; }
++            if (i < 24) mtTotals[i] += ms;
++            if (std::string_view(name) == "end" && std::chrono::duration<double, std::milli>(now - mtStart).count() > 200) {
++                fprintf(stderr, "[prof] RT64 fullSync phases:");
++                for (int k = 0; k < mtCount; k++) if (mtTotals[k] >= 1.0) fprintf(stderr, " %s %.0f ms;", mtNames[k], mtTotals[k]);
++                fprintf(stderr, "\n");
++            }
++        };
+         flush();
++        mtMark("flush");
+         submitFramebufferPair(FramebufferPair::FlushReason::ProcessDisplayListsEnd);
++        mtMark("submit pair");
+ 
+         // Append any framebuffer operations to the end of the last framebuffer pair.
+         int workloadCursor = ext.workloadQueue->writeCursor;
+@@ -756,6 +790,7 @@ namespace RT64 {
+         // Copy the current state's extended parameters into the workload.
+         workload.extended.ditherNoiseStrength = extended.ditherNoiseStrength;
+ 
++        mtMark("framebuffer ops");
+         auto emitTileWarning = [&](CommandWarning warning, size_t tileIndex) {
+             warning.indexType = CommandWarning::IndexType::TileIndex;
+             warning.tile.index = uint32_t(tileIndex);
+@@ -886,6 +921,7 @@ namespace RT64 {
+         }
+ 
+         // Fill out all the rendering data for the framebuffer pairs that will be uploaded.
++        mtMark("tile checks");
+         const UserConfiguration::Upscale2D upscale2D = ext.userConfig->upscale2D;
+         const bool scaleLOD = ext.enhancementConfig->textureLOD.scale;
+         const bool usesHDR = ext.shaderLibrary->usesHDR;
+@@ -1068,6 +1104,7 @@ namespace RT64 {
+         }
+ 
+         // Ensure there's as many GPU tiles as call tiles available in the vector.
++        mtMark("fb pair loop");
+         workload.drawData.gpuTiles.resize(workload.drawData.callTiles.size());
+ 
+         // Start uploading the entire draw data for all the framebuffer pairs that were processed.
+@@ -1094,6 +1131,7 @@ namespace RT64 {
+         }
+ 
+         // Switch the data ranges.
++        mtMark("uploads");
+         uint32_t loadOpCursor = uint32_t(workload.drawRanges.loadOperations.first);
+         uint32_t rdpTileCursor = uint32_t(workload.drawRanges.rdpTiles.first);
+         uint32_t gpuTileCursor = rdpTileCursor;
+@@ -1101,8 +1139,10 @@ namespace RT64 {
+ 
+         // Make sure pipelines for the ubershader have been created before rendering. This condition is executed regardless
+         // of whether rendering to RAM is active so the workload queue is guaranteed to have the pipelines ready as well.
++        mtMark("pre-pipeline");
+         ext.rasterShaderCache->shaderUber->waitForPipelineCreation();
+ 
++        mtMark("pipeline wait");
+         if (renderToRDRAM) {
+             const hlslpp::float2 resolutionScale(1.0f, 1.0f);
+             RT64::Framebuffer *colorFb = nullptr;
+@@ -1258,7 +1298,9 @@ namespace RT64 {
+                 }
+ 
+                 // Synchronize all texture uploads before filling out the GPU tiles and update the texture cache on the framebuffer renderer.
++                mtMark("before texture uploads");
+                 ext.textureCache->waitForGPUUploads();
++                mtMark("texture upload wait");
+                 framebufferRenderer->updateTextureCache(ext.textureCache);
+ 
+                 thread_local std::vector<BufferUploader *> bufferUploaders;
+@@ -1417,9 +1459,11 @@ namespace RT64 {
+                 }
+ 
+                 ext.framebufferGraphicsWorker->commandList->end();
++                mtMark("before gpu draw");
+                 framebufferRenderer->waitForUploaders();
+                 ext.framebufferGraphicsWorker->execute();
+                 ext.framebufferGraphicsWorker->wait();
++                mtMark("gpu draw wait");
+ 
+                 pairCursor = framebufferPairCursor;
+                 while (pairCursor < maxFramebufferPair) {
+@@ -1535,6 +1579,7 @@ namespace RT64 {
+ 
+         // Evict from the texture cache that are too old and should no longer be maintained.
+         // The texture manager should also be notified of any hashes that were removed.
++        mtMark("render to rdram");
+         if (ext.textureCache->evict(workloadCounter, evictedTextureHashes)) {
+             textureManager.removeHashes(evictedTextureHashes);
+         }
+@@ -1594,6 +1639,7 @@ namespace RT64 {
+             }
+         }
+ 
++        mtMark("evict/script");
+         for (uint32_t f = 0; f < workload.fbPairCount; f++) {
+             FramebufferPair &fbPair = workload.fbPairs[f];
+             for (uint32_t p = 0; p < fbPair.projectionCount; p++) {
+@@ -1719,8 +1765,11 @@ namespace RT64 {
+         }
+         
+         // Advance the workload queue at the end of a full synchronization.
++        mtMark("fb pair loop 2");
+         advanceWorkload(workload, false);
++        mtMark("advance workload");
+         ext.workloadQueue->advanceToNextWorkload();
++        mtMark("advance queue");
+ 
+         // Make sure the profiler starts after the workload is advanced to ignore any waiting time.
+         dlCpuProfiler.reset();
+@@ -1777,6 +1826,7 @@ namespace RT64 {
+         // Extended GBI must be enabled again when the display list starts.
+         disableExtendedGBI();
+         clearExtended();
++        mtMark("end");
+     }
+     
+     void State::updateScreen(const VI &newVI, bool fromEarlyPresent) {
 diff --git a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuffer_renderer.cpp
 index c4cf1bf..be72f26 100644
 --- a/src/render/rt64_framebuffer_renderer.cpp

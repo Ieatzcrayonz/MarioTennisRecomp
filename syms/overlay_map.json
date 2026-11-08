@@ -299,9 +299,18 @@
   "tlb": true
  },
  {
+  "segment": 108,
+  "real_rom": 11022672,
+  "vrom": 18613664,
+  "vram": 268435456,
+  "size": 4256,
+  "verified": true,
+  "tlb": true
+ },
+ {
   "segment": 147,
   "real_rom": 11441280,
-  "vrom": 18613664,
+  "vrom": 18617920,
   "vram": 268435456,
   "size": 5536,
   "verified": true,
@@ -310,7 +319,7 @@
  {
   "segment": 163,
   "real_rom": 11667680,
-  "vrom": 18619200,
+  "vrom": 18623456,
   "vram": 268435456,
   "size": 6112,
   "verified": true,
@@ -319,7 +328,7 @@
  {
   "segment": 178,
   "real_rom": 11744112,
-  "vrom": 18625312,
+  "vrom": 18629568,
   "vram": 268435456,
   "size": 5424,
   "verified": true,
@@ -328,16 +337,25 @@
  {
   "segment": 200,
   "real_rom": 11912512,
-  "vrom": 18630736,
+  "vrom": 18634992,
   "vram": 268435456,
   "size": 8016,
   "verified": true,
   "tlb": true
  },
  {
+  "segment": 473,
+  "real_rom": 13222896,
+  "vrom": 18643008,
+  "vram": 268435456,
+  "size": 5136,
+  "verified": true,
+  "tlb": true
+ },
+ {
   "segment": 774,
   "real_rom": 14012544,
-  "vrom": 18638752,
+  "vrom": 18648144,
   "vram": 268435456,
   "size": 5136,
   "verified": true,
@@ -346,7 +364,7 @@
  {
   "segment": 965,
   "real_rom": 15045840,
-  "vrom": 18643888,
+  "vrom": 18653280,
   "vram": 268435456,
   "size": 7584,
   "verified": true,
@@ -355,9 +373,18 @@
  {
   "segment": 989,
   "real_rom": 15173008,
-  "vrom": 18651472,
+  "vrom": 18660864,
   "vram": 268435456,
   "size": 5264,
+  "verified": true,
+  "tlb": true
+ },
+ {
+  "segment": 1042,
+  "real_rom": 15461616,
+  "vrom": 18666128,
+  "vram": 268435456,
+  "size": 5120,
   "verified": true,
   "tlb": true
  }

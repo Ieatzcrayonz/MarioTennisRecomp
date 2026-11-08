@@ -327,6 +327,7 @@ void reset_audio(uint32_t output_freq) {
     update_audio_converter();
 }
 
+void mt_prof_thread_created(uint8_t* rdram);
 RspUcodeFunc mt_rsp_interpret;
 #ifndef MT_LIVE_RECOMP
 extern RspUcodeFunc aspMain;
@@ -379,6 +380,7 @@ std::vector<recomp::GameEntry> supported_games = {
         .entrypoint_address = (gpr)(int32_t)0x80031000,
         .entrypoint = recomp_entrypoint,
         .on_init_callback = mt::on_init,
+        .thread_create_callback = [](uint8_t* rdram, recomp_context*) { mt_prof_thread_created(rdram); },
     },
 };
 
@@ -510,10 +512,29 @@ void reorder_texture_pack(recomp::mods::ModContext&) {
 
 #define REGISTER_FUNC(name) recomp::overlays::register_base_export(#name, name)
 
+#ifdef _WIN32
+// Crash report: prints the faulting address (as an offset into the exe, for llvm-symbolizer with the
+// .pdb) so bug reports from players can be traced. Written to stderr / the MT_LOG file.
+static LONG WINAPI mt_crash_filter(EXCEPTION_POINTERS* info) {
+    const EXCEPTION_RECORD* rec = info->ExceptionRecord;
+    HMODULE exe = GetModuleHandleW(nullptr);
+    uintptr_t addr = (uintptr_t)rec->ExceptionAddress;
+    fprintf(stderr, "[mt] CRASH: exception 0x%08lX at %p (exe+0x%llX)", rec->ExceptionCode, rec->ExceptionAddress,
+            (unsigned long long)(addr - (uintptr_t)exe));
+    if (rec->ExceptionCode == EXCEPTION_ACCESS_VIOLATION && rec->NumberParameters >= 2) {
+        fprintf(stderr, ", %s address %p", rec->ExceptionInformation[0] ? "writing" : "reading", (void*)rec->ExceptionInformation[1]);
+    }
+    fprintf(stderr, "\n");
+    fflush(stderr);
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+#endif
+
 int main(int argc, char** argv) {
     (void)argc;
     (void)argv;
 #ifdef _WIN32
+    SetUnhandledExceptionFilter(mt_crash_filter);
     // Run from the executable's folder so assets/ and recompcontrollerdb.txt are found whether the
     // game is started by double-click, a shortcut, or from another directory.
     {
