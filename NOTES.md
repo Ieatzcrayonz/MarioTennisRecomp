@@ -234,4 +234,19 @@ at its RAM buffer. With the software TLB in place the relocation is belt-and-bra
 - More MT_PROF diagnostics: heap-9 integrity check after every load and frame ("HEAP BROKEN"), game
   function names for unmapped accesses and stuck threads (`mt_live_describe`), 8 MiB RDRAM dump on the
   first freeze, RT64 write-back / framebuffer-as-texture logs, 5-second fullSync phase totals.
-- Known: objects pop in/out at the left/right edges in widescreen (the game culls to its 4:3 view).
+- Widescreen edge pop-in **fixed** (see "Widescreen culling" below).
+
+## Widescreen culling (2026-11-08)
+Objects (crowd, Bob-ombs, Koopas, players) were culled to the game's 4:3 view, so with Aspect Ratio
+Expand they popped in/out at the left/right edges. The game's only object visibility test is
+`func_800346A0(x, y, z, radius)` in main (34 callers): a sphere-vs-frustum test against the camera
+block at 0x80062B88 (+0x00 projection, +0x40 view matrix, +0x80/+0x84 x/y projection factors,
++0x88/+0x8C viewport centre; filled by func_800341D4 / func_80034404). Returns 0 behind the camera,
+1 outside left/right, 2 outside top/bottom, else the (negative) depth.
+Fix: two hooks in mt.us.toml (before 0x8003473C / 0x8003475C, right after it loads +0x80 into $f0)
+multiply the horizontal factor by `mt_cull_x_scale()` = (4/3) / window aspect in Expand mode, 1.0 in
+Original/Stretch or when the window is 4:3 or narrower (`src/game/mt_widescreen.cpp`, refreshed every gfx
+task from mt_fixup_gfx_task). The camera block itself is untouched, so screen-space placement
+(func_800349EC / func_80034838: sprites, markers) is unchanged. Verified at 1680x720 (21:9) in the
+clay-court demo: the Bob-omb row on the sideline now runs to the window edge (the baseline dropped it
+outside the 4:3 area). MT_PROF late frames 16 vs 17 (baseline) over 20-130 s of demos.

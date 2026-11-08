@@ -76,9 +76,11 @@ namespace {
 }
 
 void mt_prof_gfx_task();
+void mt_widescreen_update();
 
 extern "C" void mt_fixup_gfx_task(uint8_t* rdram, uint32_t task) {
     mt_prof_gfx_task();
+    mt_widescreen_update();
     // Pass 1: does this frame use the narrow layout?
     bool narrow_frame = false;
     walk(rdram, task, [&](uint32_t, uint32_t w0, uint32_t w1, auto&) {

@@ -2818,8 +2818,10 @@ static const MtLiveHook mt_live_hooks[] = {
     { "func_80033240", 0x80033240 }, // event 2
     { "func_80033244", 0x80033244 }, // event 3
     { "func_800326FC", 0x80032784 }, // event 4
-    { "func_80031D60", 0x80031D90 }, // event 5
-    { "func_seg78_80100010", 0x80100018 }, // event 6
+    { "func_800346A0", 0x8003473C }, // event 5
+    { "func_800346A0", 0x8003475C }, // event 6
+    { "func_80031D60", 0x80031D90 }, // event 7
+    { "func_seg78_80100010", 0x80100018 }, // event 8
 };
 
 // Native implementations, by the name the game's symbol has.
@@ -2979,8 +2981,10 @@ static void mt_live_run_hook(uint8_t* rdram, recomp_context* ctx, uint32_t index
         case 2: { void mt_check_range(const char*, uint32_t, uint32_t, uint32_t); mt_check_range("bzero", (uint32_t)ctx->r4, (uint32_t)ctx->r5, (uint32_t)ctx->r31); } break;
         case 3: { void mt_check_range(const char*, uint32_t, uint32_t, uint32_t); mt_check_range("fill", (uint32_t)ctx->r4, (uint32_t)ctx->r5, (uint32_t)ctx->r31); } break;
         case 4: { void mt_fixup_gfx_task(uint8_t*, uint32_t); void mt_dump_gfx_task(uint8_t*, uint32_t); mt_fixup_gfx_task(rdram, (uint32_t)ctx->r4); mt_dump_gfx_task(rdram, (uint32_t)ctx->r4); } break;
-        case 5: { void mt_spin_yield(uint8_t* rdram, uint32_t id); mt_spin_yield(rdram, 0); } break;
-        case 6: { void mt_spin_yield(uint8_t* rdram, uint32_t id); mt_spin_yield(rdram, 0); } break;
+        case 5: { float mt_cull_x_scale(void); ctx->f0.fl *= mt_cull_x_scale(); } break;
+        case 6: { float mt_cull_x_scale(void); ctx->f0.fl *= mt_cull_x_scale(); } break;
+        case 7: { void mt_spin_yield(uint8_t* rdram, uint32_t id); mt_spin_yield(rdram, 0); } break;
+        case 8: { void mt_spin_yield(uint8_t* rdram, uint32_t id); mt_spin_yield(rdram, 0); } break;
     }
 }
 }

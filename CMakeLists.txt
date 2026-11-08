@@ -114,6 +114,7 @@ set (SOURCES
     ${CMAKE_SOURCE_DIR}/src/game/mt_dldump.cpp
     ${CMAKE_SOURCE_DIR}/src/game/mt_dlfix.cpp
     ${CMAKE_SOURCE_DIR}/src/game/mt_prof.cpp
+    ${CMAKE_SOURCE_DIR}/src/game/mt_widescreen.cpp
 
     ${CMAKE_SOURCE_DIR}/src/ui/ui_renderer.cpp
     ${CMAKE_SOURCE_DIR}/src/ui/ui_state.cpp
