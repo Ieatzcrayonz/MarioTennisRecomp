@@ -34,8 +34,11 @@ void mt_prof_load_begin() {
     if (enabled) { load_start = now_ms(); mt_prof_event("load begin", 0); }
 }
 
+bool mt_heap_check(const char* after, uint32_t rom, uint32_t dest, uint32_t size);
+
 void mt_prof_load_end(uint32_t rom, uint32_t dest, uint32_t size, bool code) {
     if (!enabled) return;
+    mt_heap_check(code ? "code load" : "data load", rom, dest, size);
     double d = now_ms() - load_start;
     loads++; load_ms += d;
     mt_prof_event(code ? "code load end rom" : "data load end rom", rom);
@@ -48,6 +51,7 @@ extern "C" void mt_prof_event(const char* what, uint32_t arg);
 
 void mt_prof_gfx_task() {
     if (!enabled) return;
+    mt_heap_check("frame", 0, 0, 0);
     double t = now_ms();
     bool late = last_task != 0 && t - last_task > 40.0;
     mt_prof_flush_events(late);
@@ -88,6 +92,7 @@ void mt_prof_flush_events(bool print) {
 // Freeze watchdog (MT_PROF): if no gfx task arrives for 4 s, print every game thread's state and the
 // message queue it is blocked on, so a hang can be traced to what each thread is waiting for.
 #include <mutex>
+#include <string>
 #include <thread>
 #include <vector>
 #include "ultramodern/ultramodern.hpp"
@@ -117,11 +122,64 @@ namespace {
             }
             fprintf(stderr, "\n");
         }
+        // First freeze only: save the 8 MiB of game memory (byte order as in the runtime) for offline study.
+        static bool dumped = false;
+        if (!dumped) {
+            dumped = true;
+            const char* log = std::getenv("MT_LOG");
+            std::string path = log ? std::string(log) + ".rdram.bin" : "freeze_rdram.bin";
+            if (FILE* f = fopen(path.c_str(), "wb")) {
+                fwrite(watch_rdram, 1, 0x800000, f);
+                fclose(f);
+                fprintf(stderr, "[prof] game memory saved to %s\n", path.c_str());
+            }
+        }
         fflush(stderr);
     }
 }
 
 void mt_dump_all_stacks();
+
+// Heap integrity (MT_PROF): the game's allocator (func_80038040) keeps a table of 24-byte heap
+// descriptors at 0x8005DC20; +8 is the head of a circular list of block headers
+// { +0 size, +4 in-use, +8 next }. Reports the first time any list stops being well formed,
+// together with what happened just before (a file load, or just a frame).
+bool mt_heap_check(const char* after, uint32_t rom, uint32_t dest, uint32_t size) {
+    static bool reported = false;
+    static std::string last_ok_event = "(none)";
+    if (reported || watch_rdram == nullptr) return true;
+    constexpr uint32_t table = 0x8005DC20;
+    auto valid = [](uint32_t p) { return p >= 0x80000000u && p < 0x80800000u && (p & 3) == 0; };
+    for (uint32_t h = 0; h < 16; h++) {
+        uint32_t sentinel = table + h * 24;
+        uint32_t node = rd32(sentinel + 8);
+        if (!valid(node)) continue;   // unused descriptor
+        uint32_t prev = sentinel;
+        for (int n = 0; n < 20000 && node != sentinel; n++) {
+            uint32_t next = rd32(node + 8);
+            if (!valid(next) || n == 19999) {
+                reported = true;
+                fprintf(stderr, "[prof] HEAP BROKEN after %s rom 0x%08X -> 0x%08X (0x%X bytes): heap %u, block %08X "
+                        "(size %08X used %08X next %08X), previous block %08X. Last good check: %s\n",
+                        after, rom, dest, size, h, node, rd32(node), rd32(node + 4), next, prev, last_ok_event.c_str());
+                // Show every block of this heap up to the broken one.
+                uint32_t q = rd32(sentinel + 8);
+                for (int k = 0; k < 400 && valid(q) && q != sentinel; k++) {
+                    fprintf(stderr, "[prof]     block %08X size %08X used %08X next %08X\n", q, rd32(q), rd32(q + 4), rd32(q + 8));
+                    if (q == node) break;
+                    q = rd32(q + 8);
+                }
+                fflush(stderr);
+                return false;
+            }
+            prev = node; node = next;
+        }
+    }
+    char buf[96];
+    snprintf(buf, sizeof(buf), "%s rom 0x%08X -> 0x%08X (0x%X bytes)", after, rom, dest, size);
+    if (rom != 0) last_ok_event = buf;
+    return true;
+}
 
 void mt_prof_thread_created(uint8_t* rdram) {
     if (!enabled) return;
@@ -156,6 +214,30 @@ void mt_prof_thread_created(uint8_t* rdram) {
 #include <tlhelp32.h>
 #include <dbghelp.h>
 #pragma comment(lib, "dbghelp.lib")
+
+// Game call chain: recompiled game code has no unwind info, so scan raw stack memory for return
+// addresses that fall inside it (a few entries may be stale leftovers, but the order is innermost first).
+#ifdef MT_LIVE_RECOMP
+extern "C" const char* mt_live_describe(const void* addr, uintptr_t* offset);
+#else
+extern "C" const char* mt_live_describe(const void*, uintptr_t*) { return nullptr; }
+#endif
+extern "C" void mt_print_game_stack(const void* pc, const void* sp, size_t bytes) {
+    uintptr_t off = 0;
+    if (const char* n = mt_live_describe(pc, &off)) fprintf(stderr, "[mt]     in game code: %s+0x%llX\n", n, (unsigned long long)off);
+    MEMORY_BASIC_INFORMATION mbi{};
+    if (!VirtualQuery(sp, &mbi, sizeof(mbi))) return;
+    uintptr_t end = reinterpret_cast<uintptr_t>(mbi.BaseAddress) + mbi.RegionSize;
+    uintptr_t p = reinterpret_cast<uintptr_t>(sp) & ~uintptr_t(7);
+    int shown = 0;
+    for (; p + 8 <= end && p < reinterpret_cast<uintptr_t>(sp) + bytes && shown < 16; p += 8) {
+        const void* v = *reinterpret_cast<const void* const*>(p);
+        if (const char* n = mt_live_describe(v, &off); n != nullptr && off != 0) {
+            fprintf(stderr, "[mt]       called from %s+0x%llX\n", n, (unsigned long long)off);
+            shown++;
+        }
+    }
+}
 
 void mt_dump_all_stacks() {
     static bool sym_ready = false;
@@ -193,6 +275,22 @@ void mt_dump_all_stacks() {
                     if (len >= sizeof(line_buf) - 64) break;
                 }
                 if (interesting) fprintf(stderr, "[prof]   host thread %lu:%s\n", te.th32ThreadID, line_buf);
+                // Threads running (or stuck in) game code: show where.
+                CONTEXT gctx{}; gctx.ContextFlags = CONTEXT_FULL;
+                if (GetThreadContext(th, &gctx)) {
+                    uintptr_t o = 0;
+                    bool in_game = mt_live_describe(reinterpret_cast<void*>(gctx.Rip), &o) != nullptr;
+                    // Or blocked in a host call made from game code: look for game return addresses.
+                    for (uintptr_t p = gctx.Rsp; !in_game && p < gctx.Rsp + 0x400; p += 8) {
+                        void* v = nullptr; SIZE_T got = 0;
+                        if (!ReadProcessMemory(process, reinterpret_cast<void*>(p), &v, 8, &got)) break;
+                        in_game = mt_live_describe(v, &o) != nullptr;
+                    }
+                    if (in_game) {
+                        fprintf(stderr, "[prof]   host thread %lu runs game code (first frame %s):\n", te.th32ThreadID, line_buf);
+                        mt_print_game_stack(reinterpret_cast<void*>(gctx.Rip), reinterpret_cast<void*>(gctx.Rsp), 0x4000);
+                    }
+                }
             }
             ResumeThread(th);
         }

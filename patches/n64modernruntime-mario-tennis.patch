@@ -125,7 +125,7 @@ index db45ee4..91b80cb 100644
  bool is_game_thread();
  void submit_rsp_task(RDRAM_ARG PTR(OSTask) task);
 diff --git a/ultramodern/src/events.cpp b/ultramodern/src/events.cpp
-index 46f63f1..13490fb 100644
+index 46f63f1..3498ed3 100644
 --- a/ultramodern/src/events.cpp
 +++ b/ultramodern/src/events.cpp
 @@ -1,3 +1,5 @@
@@ -175,10 +175,21 @@ index 46f63f1..13490fb 100644
  }
  
  void task_thread_func(uint8_t* rdram, moodycamel::LightweightSemaphore* thread_ready) {
-@@ -369,6 +377,14 @@ void gfx_thread_func(uint8_t* rdram, moodycamel::LightweightSemaphore* thread_re
+@@ -363,12 +371,24 @@ void gfx_thread_func(uint8_t* rdram, moodycamel::LightweightSemaphore* thread_re
+                 // start another graphics task until the RDP is also complete. Games usually preserve the RSP inputs until the RDP
+                 // is finished as well, so sending this early shouldn't be an issue in most cases.
+                 // If this causes issues then the logic can be replaced with responding to yield requests.
+-                sp_complete();
++                // Mario Tennis experiment: MT_LATE_SP=1 reports RSP completion only after the renderer has finished, so the
++                // game can't read a frame from RDRAM before RT64 has written it there.
++                static const bool late_sp = std::getenv("MT_LATE_SP") != nullptr;
++                if (!late_sp) sp_complete();
+                 ultramodern::measure_input_latency();
+ 
                  [[maybe_unused]] auto renderer_start = std::chrono::high_resolution_clock::now();
                  renderer_context->send_dl(&task_action->task);
                  [[maybe_unused]] auto renderer_end = std::chrono::high_resolution_clock::now();
++                if (late_sp) sp_complete();
 +                {
 +                    static const bool prof = std::getenv("MT_PROF") != nullptr;
 +                    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(renderer_end - renderer_start).count();

@@ -215,4 +215,23 @@ at its RAM buffer. With the software TLB in place the relocation is belt-and-bra
   call stacks (dbghelp + .pdb) after 4 s without a gfx task; RT64 reports slow display lists/fullSync
   phases; MT_LOG_TIMERS logs osSetTimer. A crash handler always prints the faulting exe offset
   (`llvm-symbolizer --obj=build\MarioTennisRecompiled.exe --relative-address 0x...`).
-- Known: a black box / green squares in some demo replay and smash cut-scene effects (framebuffer effect).
+- Hard freeze on the 2nd return to the title screen (after 3 demos): the game's allocator (func_80038040)
+  looped forever on heap 9, whose first block header at 0x80238000 had been overwritten with 0x00010001.
+  The title screen draws a 304x224 frame at 0x229CC0 that spans it; RT64 writes rendered frames back to
+  RDRAM only after the whole GPU round trip, after the game had already built the heap there (on hardware
+  the RDP finishes within ~1 ms). Fix in RT64 `State::fullSync`: snapshot the RDRAM each framebuffer pair
+  will write over, and at write-back keep every word the CPU changed since (`mtCopyNativeToRAMMerged`;
+  the snapshot is updated with RT64's own writes so later pairs in the workload aren't affected).
+  Reporting SP completion after rendering (MT_LATE_SP=1, experiment) did not fix it.
+- Box-shaped / missing player shadows, black speed board, black box in the smash double replay: images the
+  game draws and reuses as textures (64-wide CI8 and 16-bit shadow silhouettes, 32/48-wide board digits,
+  the replay's captured frame at 0x238040) came out wrong through RT64's GPU tile copies. They now go
+  through RDRAM (`mtUseRDRAMForFramebuffer` in rt64_rdp.cpp: no tile copy, but the TMEM region is still
+  tagged so RT64 syncs the image to RDRAM before it's sampled). The four 384-wide screen buffers
+  (0x382000/0x3AC000/0x3D6000/0x000400) are reused ~1000x/s and keep GPU copies; routing those through RDRAM
+  as well cost ~10x more late frames. Cost now: ~1 ms/frame (14-17 vs 11 late frames per 2 min of demos).
+  MT_GPU_COPY_ALL=1 / MT_RDRAM_ALL=1 / MT_NO_GPU_COPY=1 switch behaviour for comparison.
+- More MT_PROF diagnostics: heap-9 integrity check after every load and frame ("HEAP BROKEN"), game
+  function names for unmapped accesses and stuck threads (`mt_live_describe`), 8 MiB RDRAM dump on the
+  first freeze, RT64 write-back / framebuffer-as-texture logs, 5-second fullSync phase totals.
+- Known: objects pop in/out at the left/right edges in widescreen (the game culls to its 4:3 view).

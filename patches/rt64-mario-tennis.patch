@@ -1,3 +1,26 @@
+diff --git a/src/common/rt64_emulator_configuration.cpp b/src/common/rt64_emulator_configuration.cpp
+index 303113d..2928f07 100644
+--- a/src/common/rt64_emulator_configuration.cpp
++++ b/src/common/rt64_emulator_configuration.cpp
+@@ -4,6 +4,8 @@
+ 
+ #include "rt64_emulator_configuration.h"
+ 
++#include <cstdlib>
++
+ namespace RT64 {
+     // EmulatorConfiguration
+ 
+@@ -11,6 +13,7 @@ namespace RT64 {
+         dither.postBlendNoise = true;
+         dither.postBlendNoiseNegative = false;
+         framebuffer.renderToRAM = true;
+-        framebuffer.copyWithGPU = true;
++        // Mario Tennis experiment: MT_NO_GPU_COPY=1 makes textures read from framebuffers come from RDRAM.
++        framebuffer.copyWithGPU = (std::getenv("MT_NO_GPU_COPY") == nullptr);
+     }
+ };
+\ No newline at end of file
 diff --git a/src/hle/rt64_interpreter.cpp b/src/hle/rt64_interpreter.cpp
 index dccaa87..d4a7869 100644
 --- a/src/hle/rt64_interpreter.cpp
@@ -53,16 +76,81 @@ index dccaa87..d4a7869 100644
      }
  };
 diff --git a/src/hle/rt64_rdp.cpp b/src/hle/rt64_rdp.cpp
-index c852a16..045f76b 100644
+index c852a16..a68aaa5 100644
 --- a/src/hle/rt64_rdp.cpp
 +++ b/src/hle/rt64_rdp.cpp
-@@ -1,3 +1,5 @@
+@@ -1,3 +1,8 @@
 +#include <cstdlib>
 +#include <cstdio>
++#include <mutex>
++#include <unordered_map>
++#include <unordered_set>
  //
  // RT64
  //
-@@ -224,6 +226,15 @@ namespace RT64 {
+@@ -26,6 +31,23 @@
+ #endif
+ 
+ namespace RT64 {
++    // Mario Tennis: images the game draws and then reuses as textures are read from RDRAM (after RT64 has synced them
++    // there) instead of through GPU tile copies, which got them wrong: box-shaped player shadows (64-wide CI8 images),
++    // black score/speed boards, and a black box in the smash double replay (the captured frame at 0x238040). The three
++    // in-match screen buffers are reused ~1000 times a second and render correctly, so they keep the faster GPU copies.
++    // MT_GPU_COPY_ALL=1 restores RT64's behaviour; MT_RDRAM_ALL=1 sends every image through RDRAM (for comparison).
++    static bool mtUseRDRAMForFramebuffer(const Framebuffer *fb) {
++        static const bool all = std::getenv("MT_GPU_COPY_ALL") != nullptr;
++        static const bool none = std::getenv("MT_RDRAM_ALL") != nullptr;
++        if (none) return true;
++        if (all) return false;
++        // The screen buffers (three in matches, one at 0x000400 elsewhere) render correctly and keep GPU copies; narrowing
++        // the RDRAM path further (to 8-bit images only) lost player shadows, which are also drawn into 16-bit 64-wide images.
++        const uint32_t a = fb->addressStart;
++        const bool screenBuffer = (fb->width == 384) && ((a == 0x382000) || (a == 0x3AC000) || (a == 0x3D6000) || (a == 0x000400));
++        return !screenBuffer;
++    }
++
+     // RDP
+     static uint8_t getCommandLength(uint32_t commandId) {
+         if (commandId == (G_TEXRECT & 0x3F) || commandId == (G_TEXRECTFLIP & 0x3F)) {
+@@ -134,11 +156,37 @@ namespace RT64 {
+         auto &fbManager = state->framebufferManager;
+         Framebuffer *fb = fbManager.findMostRecentContaining(addressStart, addressEnd);
+         if (fb != nullptr) {
++            // Mario Tennis: small off-screen images (character shadows drawn into 64-wide 8-bit images, the scoreboard
++            // and speed-board digits) come out wrong through GPU tile copies (box shadows, black boards). They are read
++            // from RDRAM instead, where RT64 has written them back; full-screen images keep the faster GPU copies.
++            // The region is still tagged below, so RT64 syncs the image to RDRAM before the texture is used (the game
++            // draws a player's shadow and samples it within the same frame).
+             const bool gpuCopiesEnabled = state->ext.emulatorConfig->framebuffer.copyWithGPU;
+             if (!gpuCopiesEnabled) {
+                 return;
+             }
+ 
++            if (mtUseRDRAMForFramebuffer(fb)) {
++                makeTileCopy = false;
++            }
++
++            // Diagnostics (MT_PROF): how often each framebuffer is reused as a texture.
++            {
++                static const bool prof = std::getenv("MT_PROF") != nullptr;
++                if (prof) {
++                    static std::mutex m;
++                    static std::unordered_map<uint64_t, uint32_t> counts;
++                    static uint32_t total = 0;
++                    std::lock_guard<std::mutex> lock(m);
++                    counts[(uint64_t(fb->addressStart) << 16) | fb->width]++;
++                    if ((++total % 2000) == 0) {
++                        fprintf(stderr, "[prof] framebuffer-as-texture uses so far:");
++                        for (const auto &c : counts) fprintf(stderr, " 0x%06X(w%u)=%u", uint32_t(c.first >> 16), uint32_t(c.first & 0xFFFF), c.second);
++                        fprintf(stderr, "\n");
++                    }
++                }
++            }
++
+             FramebufferTile fbTile;
+             bool couldMakeTile = false;
+             if (makeTileCopy) {
+@@ -224,6 +272,15 @@ namespace RT64 {
  
      constexpr uint32_t ExtendedMask = 0x80000000U;
  
@@ -78,7 +166,7 @@ index c852a16..045f76b 100644
      uint32_t RDP::maskAddress(uint32_t address) {
          if (state->extended.extendRDRAM && ((address & ExtendedMask) == ExtendedMask)) {
              return address - ExtendedMask;
-@@ -234,6 +245,7 @@ namespace RT64 {
+@@ -234,6 +291,7 @@ namespace RT64 {
      }
  
      void RDP::setColorImage(uint8_t fmt, uint8_t siz, uint16_t width, uint32_t address) {
@@ -86,7 +174,7 @@ index c852a16..045f76b 100644
          // Make sure the new color image is actually different. Some games will set the color image
          // multiple times despite setting the exact same parameters.
          const uint32_t newAddress = maskAddress(address);
-@@ -255,6 +267,7 @@ namespace RT64 {
+@@ -255,6 +313,7 @@ namespace RT64 {
      }
  
      void RDP::setDepthImage(uint32_t address) {
@@ -94,15 +182,31 @@ index c852a16..045f76b 100644
          const uint32_t newAddress = maskAddress(address);
          if (depthImage.address != newAddress) {
              depthImage.address = newAddress;
-@@ -267,6 +280,7 @@ namespace RT64 {
+@@ -267,6 +326,23 @@ namespace RT64 {
      }
  
      void RDP::setTextureImage(uint8_t fmt, uint8_t siz, uint16_t width, uint32_t address) {
 +        mtLogBadAddress("texture image", address, width);
++        // Mario Tennis diagnostics (MT_PROF): textures read from the game's screen buffers (frame-capture effects).
++        {
++            static const bool prof = std::getenv("MT_PROF") != nullptr;
++            const uint32_t a = address & 0xFFFFFF;
++            const bool inScreen = (a >= 0x000400 && a < 0x02A400) || (a >= 0x382000 && a < 0x400000) ||
++                                  (a >= 0x229CC0 && a < 0x262040);
++            if (prof && inScreen) {
++                static std::mutex m;
++                static std::unordered_set<uint64_t> seen;
++                const uint64_t key = (uint64_t(a) << 24) | (uint64_t(width) << 8) | (uint64_t(fmt) << 4) | siz;
++                std::lock_guard<std::mutex> lock(m);
++                if (seen.insert(key).second && seen.size() < 500) {
++                    fprintf(stderr, "[prof] RDP texture from screen buffer: address 0x%06X width %u fmt %u siz %u\n", a, width, fmt, siz);
++                }
++            }
++        }
          texture.fmt = fmt;
          texture.siz = siz;
          texture.width = width;
-@@ -349,6 +363,10 @@ namespace RT64 {
+@@ -349,6 +425,10 @@ namespace RT64 {
      
      template<bool RGBA32 = false, bool TLUT = false>
      __forceinline void loadWord(uint8_t *TMEM, uint32_t tmemAddress, uint32_t tmemXorMask, const uint8_t *RDRAM, uint32_t textureAddress) {
@@ -113,7 +217,7 @@ index c852a16..045f76b 100644
          // Only sample the first two bytes in TLUT mode.
          uint32_t offsetMask;
          if constexpr (TLUT) {
-@@ -446,9 +464,15 @@ namespace RT64 {
+@@ -446,9 +526,15 @@ namespace RT64 {
          const uint32_t bytesOffset = (loadTile.uls >> 2) << loadTexture.siz >> 1;
          const uint32_t bytesPerRow = loadTexture.width << loadTexture.siz >> 1;
          const uint32_t textureStart = loadTexture.address + bytesOffset + bytesPerRow * (loadTile.ult >> 2);
@@ -132,20 +236,31 @@ index c852a16..045f76b 100644
          const uint32_t tmemStart = loadTile.tmem << 3;
          const uint32_t tmemStride = loadTile.line << 3;
          const uint32_t textureEnd = textureStart + (rowCount - 1) * bytesPerRow + (wordsPerRow << 3);
+@@ -643,7 +729,7 @@ namespace RT64 {
+         checkImageOverlap(textureStart, textureEnd);
+ 
+         Framebuffer *framebuffer = state->framebufferManager.findMostRecentContaining(textureStart, textureEnd);
+-        if (framebuffer != nullptr) {
++        if ((framebuffer != nullptr) && !mtUseRDRAMForFramebuffer(framebuffer)) {
+             FramebufferTile fbTile;
+             const bool RGBA32 = (t.siz == G_IM_SIZ_32b) && (t.fmt == G_IM_FMT_RGBA);
+             const uint32_t lineShift = RGBA32 ? 1 : 0;
 diff --git a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
-index 6b0bb31..82c2538 100644
+index 6b0bb31..1f71717 100644
 --- a/src/hle/rt64_state.cpp
 +++ b/src/hle/rt64_state.cpp
-@@ -1,3 +1,8 @@
+@@ -1,3 +1,10 @@
 +#include <string_view>
 +#include <cstdlib>
 +#include <cstdio>
 +#include <cstring>
 +#include <chrono>
++#include <mutex>
++#include <unordered_set>
  //
  // RT64
  //
-@@ -27,6 +32,9 @@
+@@ -27,6 +34,9 @@
  #define MI_INTR_DP          0x00000020
  #define MI_INTR_SP          0x00000001
  
@@ -155,9 +270,95 @@ index 6b0bb31..82c2538 100644
  namespace RT64 {
      const float ShiftScaleMap[] = {
          1.0f,
-@@ -737,8 +745,34 @@ namespace RT64 {
+@@ -736,9 +746,144 @@ namespace RT64 {
+         }
      }
      
++    // Mario Tennis: see the snapshot comment in fullSync.
++    void State::mtSnapshotRange(uint32_t address, uint32_t bytes) {
++        address &= 0xFFFFFF;
++        if ((bytes == 0) || ((address & 3) != 0) || (uint64_t(address) + bytes > 0x800000)) {
++            return;
++        }
++
++        for (const auto &snapshot : mtRdramSnapshots) {
++            if ((snapshot.first == address) && (snapshot.second.size() >= bytes)) {
++                return;
++            }
++        }
++
++        mtRdramSnapshots.emplace_back(address, std::vector<uint8_t>(&RDRAM[address], &RDRAM[address] + bytes));
++    }
++
++    void State::mtCopyNativeToRAMMerged(Framebuffer *fb, uint32_t rowWidth, uint32_t rowStart, uint32_t rowEnd) {
++        const uint32_t address = fb->addressStart;
++        const uint32_t rowBytes = fb->imageRowBytes(rowWidth);
++        const uint32_t start = address + rowStart * rowBytes;
++        const uint32_t end = address + rowEnd * rowBytes;
++        const std::vector<uint8_t> *snapshot = nullptr;
++        uint32_t snapshotStart = 0;
++        for (const auto &s : mtRdramSnapshots) {
++            if ((s.first <= start) && (uint64_t(s.first) + s.second.size() >= end)) {
++                snapshot = &s.second;
++                snapshotStart = s.first;
++                break;
++            }
++        }
++
++        static const bool mtProf = std::getenv("MT_PROF") != nullptr;
++        uint32_t kept = 0;
++        if ((snapshot == nullptr) || ((start & 3) != 0) || ((end & 3) != 0) || (end <= start)) {
++            fb->copyNativeToRAM(&RDRAM[address], rowWidth, rowStart, rowEnd);
++        }
++        else {
++
++        // Render into a scratch copy, then keep every word the CPU changed after the snapshot.
++        thread_local std::vector<uint8_t> scratch;
++        scratch.assign(&RDRAM[address], &RDRAM[address] + (end - address));
++        fb->copyNativeToRAM(scratch.data(), rowWidth, rowStart, rowEnd);
++        uint8_t *snapshotBytes = const_cast<uint8_t *>(snapshot->data());
++        for (uint32_t a = start; a < end; a += 4) {
++            uint32_t current, before, rendered;
++            memcpy(&current, &RDRAM[a], 4);
++            memcpy(&before, snapshotBytes + (a - snapshotStart), 4);
++            memcpy(&rendered, scratch.data() + (a - address), 4);
++            if (current != before) {
++                kept++;
++            }
++            else {
++                memcpy(&RDRAM[a], &rendered, 4);
++                // Later framebuffer pairs in this workload must see RT64's own write as the baseline, not as a CPU change.
++                memcpy(snapshotBytes + (a - snapshotStart), &rendered, 4);
++            }
++        }
++
++        }
++
++        // Diagnostics: summarize the bytes of 8-bit images after write-back (shadow silhouettes).
++        if (mtProf && (fb->siz == G_IM_SIZ_8b)) {
++            static int logged = 0;
++            if (logged++ < 30) {
++                uint32_t hist[4] = {};
++                uint32_t minV = 255, maxV = 0;
++                for (uint32_t a = start; a < end; a++) {
++                    uint8_t v = RDRAM[a ^ 3];
++                    hist[v >> 6]++;
++                    minV = std::min<uint32_t>(minV, v);
++                    maxV = std::max<uint32_t>(maxV, v);
++                }
++                char row[200]; int n = 0;
++                const uint32_t mid = address + ((rowStart + rowEnd) / 2) * rowBytes;
++                for (uint32_t x = 0; x < std::min<uint32_t>(rowBytes, 64); x++) n += snprintf(row + n, sizeof(row) - n, "%02X", RDRAM[(mid + x) ^ 3]);
++                fprintf(stderr, "[prof] 8-bit image 0x%06X rows %u-%u: bytes 0-63:%u 64-127:%u 128-191:%u 192-255:%u (min %u max %u); middle row %s\n",
++                    address, rowStart, rowEnd, hist[0], hist[1], hist[2], hist[3], minV, maxV, row);
++            }
++        }
++
++        if (mtProf && (kept > 0)) {
++            fprintf(stderr, "[prof] RT64 write-back to 0x%06X-0x%06X kept %u words the CPU changed during rendering\n", start, end, kept);
++        }
++    }
++
      void State::fullSync() {
 +        // Mario Tennis diagnostics (MT_PROF): time the phases of a slow full sync.
 +        static const bool mtProf = std::getenv("MT_PROF") != nullptr;
@@ -177,6 +378,30 @@ index 6b0bb31..82c2538 100644
 +            while (i < mtCount && mtNames[i] != name) i++;
 +            if (i == mtCount && mtCount < 24) { mtNames[mtCount++] = name; }
 +            if (i < 24) mtTotals[i] += ms;
++            // Running totals over 5-second windows: how many full syncs, and where their time went.
++            static const char *gNames[32] = {};
++            static double gTotals[32] = {};
++            static int gCount = 0, gSyncs = 0;
++            static auto gWindow = std::chrono::steady_clock::now();
++            {
++                int g = 0;
++                while (g < gCount && gNames[g] != name) g++;
++                if (g == gCount && gCount < 32) { gNames[gCount++] = name; }
++                if (g < 32) gTotals[g] += ms;
++            }
++            if (std::string_view(name) == "end") {
++                gSyncs++;
++                if (std::chrono::duration<double>(now - gWindow).count() >= 5.0) {
++                    double sum = 0;
++                    for (int k = 0; k < gCount; k++) sum += gTotals[k];
++                    fprintf(stderr, "[prof] RT64 5s window: %d full syncs, %.0f ms total;", gSyncs, sum);
++                    for (int k = 0; k < gCount; k++) if (gTotals[k] >= 5.0) fprintf(stderr, " %s %.0f;", gNames[k], gTotals[k]);
++                    fprintf(stderr, "\n");
++                    for (int k = 0; k < gCount; k++) gTotals[k] = 0;
++                    gSyncs = 0;
++                    gWindow = now;
++                }
++            }
 +            if (std::string_view(name) == "end" && std::chrono::duration<double, std::milli>(now - mtStart).count() > 200) {
 +                fprintf(stderr, "[prof] RT64 fullSync phases:");
 +                for (int k = 0; k < mtCount; k++) if (mtTotals[k] >= 1.0) fprintf(stderr, " %s %.0f ms;", mtNames[k], mtTotals[k]);
@@ -190,15 +415,32 @@ index 6b0bb31..82c2538 100644
  
          // Append any framebuffer operations to the end of the last framebuffer pair.
          int workloadCursor = ext.workloadQueue->writeCursor;
-@@ -756,6 +790,7 @@ namespace RT64 {
+@@ -756,6 +901,24 @@ namespace RT64 {
          // Copy the current state's extended parameters into the workload.
          workload.extended.ditherNoiseStrength = extended.ditherNoiseStrength;
  
 +        mtMark("framebuffer ops");
++
++        // Mario Tennis: snapshot the RDRAM that this workload's draws will be written back over. The N64's RDP writes
++        // its pixels within a few milliseconds of the task starting, but RT64 writes them back only after the whole GPU
++        // round trip; anything the game's CPU stored there in the meantime (on hardware: after the RDP had finished)
++        // must survive the write-back. Without this the title screen's frame at 0x229CC0 overwrote a heap header the
++        // game had just created at 0x238000, and the game hung walking the broken heap.
++        mtRdramSnapshots.clear();
++        for (uint32_t f = 0; f < workload.fbPairCount; f++) {
++            const FramebufferPair &pair = workload.fbPairs[f];
++            if (pair.drawColorRect.isEmpty()) continue;
++            const uint32_t rows = uint32_t(std::max(pair.drawColorRect.bottom(true), 0));
++            const uint32_t bpp = (pair.colorImage.siz == G_IM_SIZ_32b) ? 4 : ((pair.colorImage.siz == G_IM_SIZ_8b) ? 1 : 2);
++            mtSnapshotRange(pair.colorImage.address, rows * pair.colorImage.width * bpp);
++            if (pair.depthRead || pair.depthWrite) mtSnapshotRange(pair.depthImage.address, rows * pair.colorImage.width * 2);
++        }
++
++        mtMark("snapshot");
          auto emitTileWarning = [&](CommandWarning warning, size_t tileIndex) {
              warning.indexType = CommandWarning::IndexType::TileIndex;
              warning.tile.index = uint32_t(tileIndex);
-@@ -886,6 +921,7 @@ namespace RT64 {
+@@ -886,6 +1049,7 @@ namespace RT64 {
          }
  
          // Fill out all the rendering data for the framebuffer pairs that will be uploaded.
@@ -206,7 +448,7 @@ index 6b0bb31..82c2538 100644
          const UserConfiguration::Upscale2D upscale2D = ext.userConfig->upscale2D;
          const bool scaleLOD = ext.enhancementConfig->textureLOD.scale;
          const bool usesHDR = ext.shaderLibrary->usesHDR;
-@@ -1068,6 +1104,7 @@ namespace RT64 {
+@@ -1068,6 +1232,7 @@ namespace RT64 {
          }
  
          // Ensure there's as many GPU tiles as call tiles available in the vector.
@@ -214,7 +456,7 @@ index 6b0bb31..82c2538 100644
          workload.drawData.gpuTiles.resize(workload.drawData.callTiles.size());
  
          // Start uploading the entire draw data for all the framebuffer pairs that were processed.
-@@ -1094,6 +1131,7 @@ namespace RT64 {
+@@ -1094,6 +1259,7 @@ namespace RT64 {
          }
  
          // Switch the data ranges.
@@ -222,7 +464,7 @@ index 6b0bb31..82c2538 100644
          uint32_t loadOpCursor = uint32_t(workload.drawRanges.loadOperations.first);
          uint32_t rdpTileCursor = uint32_t(workload.drawRanges.rdpTiles.first);
          uint32_t gpuTileCursor = rdpTileCursor;
-@@ -1101,8 +1139,10 @@ namespace RT64 {
+@@ -1101,8 +1267,10 @@ namespace RT64 {
  
          // Make sure pipelines for the ubershader have been created before rendering. This condition is executed regardless
          // of whether rendering to RAM is active so the workload queue is guaranteed to have the pipelines ready as well.
@@ -233,7 +475,7 @@ index 6b0bb31..82c2538 100644
          if (renderToRDRAM) {
              const hlslpp::float2 resolutionScale(1.0f, 1.0f);
              RT64::Framebuffer *colorFb = nullptr;
-@@ -1258,7 +1298,9 @@ namespace RT64 {
+@@ -1258,7 +1426,9 @@ namespace RT64 {
                  }
  
                  // Synchronize all texture uploads before filling out the GPU tiles and update the texture cache on the framebuffer renderer.
@@ -243,7 +485,7 @@ index 6b0bb31..82c2538 100644
                  framebufferRenderer->updateTextureCache(ext.textureCache);
  
                  thread_local std::vector<BufferUploader *> bufferUploaders;
-@@ -1417,9 +1459,11 @@ namespace RT64 {
+@@ -1417,17 +1587,53 @@ namespace RT64 {
                  }
  
                  ext.framebufferGraphicsWorker->commandList->end();
@@ -255,7 +497,59 @@ index 6b0bb31..82c2538 100644
  
                  pairCursor = framebufferPairCursor;
                  while (pairCursor < maxFramebufferPair) {
-@@ -1535,6 +1579,7 @@ namespace RT64 {
+                     if (getFramebufferPairs(pairCursor)) {
+-                        colorFb->copyNativeToRAM(&RDRAM[colorFb->addressStart], colorWriteWidth, colorRowStart, std::min(colorRowEnd, colorFb->height));
++                        // Mario Tennis diagnostics (MT_PROF): log each distinct write-back of a rendered image into RDRAM.
++                        static const bool mtProfFb = std::getenv("MT_PROF") != nullptr;
++                        if (mtProfFb) {
++                            static std::mutex mtFbMutex;
++                            static std::unordered_set<uint64_t> mtFbSeen;
++                            auto mtLogFb = [&](const char *kind, const Framebuffer *fb, uint32_t width, uint32_t r0, uint32_t r1) {
++                                const uint32_t bpp = (fb->siz == G_IM_SIZ_32b) ? 4 : ((fb->siz == G_IM_SIZ_8b) ? 1 : 2);
++                                const uint32_t start = fb->addressStart + r0 * fb->width * bpp;
++                                const uint32_t end = fb->addressStart + r1 * fb->width * bpp;
++                                const uint64_t key = (uint64_t(fb->addressStart) << 32) ^ (uint64_t(r0) << 20) ^ (uint64_t(r1) << 8) ^ width ^ (kind[0] == 'd' ? 1ULL << 63 : 0);
++                                std::lock_guard<std::mutex> lock(mtFbMutex);
++                                if (mtFbSeen.insert(key).second && mtFbSeen.size() < 2000) {
++                                    fprintf(stderr, "[prof] RT64 writes %s image to RDRAM 0x%06X-0x%06X (fb 0x%06X, fb width %u, write width %u, rows %u-%u, siz %u, ci width %u, ci fmt %u)\n",
++                                        kind, start, end, fb->addressStart, fb->width, width, r0, r1, fb->siz, workload.fbPairs[pairCursor].colorImage.width, workload.fbPairs[pairCursor].colorImage.fmt);
++                                }
++                            };
++                            mtLogFb("color", colorFb, colorWriteWidth, colorRowStart, std::min(colorRowEnd, colorFb->height));
++                            // Every write-back that covers the game's heap-9 header at 0x238000: show the words it replaces.
++                            {
++                                const uint32_t bpp = (colorFb->siz == G_IM_SIZ_32b) ? 4 : ((colorFb->siz == G_IM_SIZ_8b) ? 1 : 2);
++                                const uint32_t s = colorFb->addressStart + colorRowStart * colorFb->width * bpp;
++                                const uint32_t e = colorFb->addressStart + std::min(colorRowEnd, colorFb->height) * colorFb->width * bpp;
++                                if (s <= 0x238000 && e > 0x23800C) {
++                                    static uint32_t mtCount = 0;
++                                    const uint32_t *w = reinterpret_cast<const uint32_t *>(&RDRAM[0x238000]);
++                                    if (mtCount++ < 400) fprintf(stderr, "[prof] RT64 write-back #%u over 0x238000 (fb 0x%06X rows %u-%u): RAM before %08X %08X %08X, draw rect L%d T%d R%d B%d\n",
++                                        mtCount, colorFb->addressStart, colorRowStart, colorRowEnd, w[0], w[1], w[2],
++                                        workload.fbPairs[pairCursor].drawColorRect.ulx, workload.fbPairs[pairCursor].drawColorRect.uly,
++                                        workload.fbPairs[pairCursor].drawColorRect.lrx, workload.fbPairs[pairCursor].drawColorRect.lry);
++                                }
++                            }
++                            if (depthWriteWidth > 0) mtLogFb("depth", depthFb, depthWriteWidth, depthRowStart, std::min(depthRowEnd, depthFb->height));
++                        }
++
++                        mtCopyNativeToRAMMerged(colorFb, colorWriteWidth, colorRowStart, std::min(colorRowEnd, colorFb->height));
+ 
+                         if (depthWriteWidth > 0) {
+-                            depthFb->copyNativeToRAM(&RDRAM[depthFb->addressStart], depthWriteWidth, depthRowStart, std::min(depthRowEnd, depthFb->height));
++                            mtCopyNativeToRAMMerged(depthFb, depthWriteWidth, depthRowStart, std::min(depthRowEnd, depthFb->height));
+                         }
+                     }
+ 
+@@ -1435,6 +1641,7 @@ namespace RT64 {
+                 }
+ 
+                 framebufferPairCursor = maxFramebufferPair;
++                mtMark("write-back");
+             };
+ 
+             // Before performing any rendering, render targets must be resized to their maximum possible size during the workload.
+@@ -1535,6 +1742,7 @@ namespace RT64 {
  
          // Evict from the texture cache that are too old and should no longer be maintained.
          // The texture manager should also be notified of any hashes that were removed.
@@ -263,7 +557,7 @@ index 6b0bb31..82c2538 100644
          if (ext.textureCache->evict(workloadCounter, evictedTextureHashes)) {
              textureManager.removeHashes(evictedTextureHashes);
          }
-@@ -1594,6 +1639,7 @@ namespace RT64 {
+@@ -1594,6 +1802,7 @@ namespace RT64 {
              }
          }
  
@@ -271,7 +565,7 @@ index 6b0bb31..82c2538 100644
          for (uint32_t f = 0; f < workload.fbPairCount; f++) {
              FramebufferPair &fbPair = workload.fbPairs[f];
              for (uint32_t p = 0; p < fbPair.projectionCount; p++) {
-@@ -1719,8 +1765,11 @@ namespace RT64 {
+@@ -1719,8 +1928,11 @@ namespace RT64 {
          }
          
          // Advance the workload queue at the end of a full synchronization.
@@ -283,7 +577,7 @@ index 6b0bb31..82c2538 100644
  
          // Make sure the profiler starts after the workload is advanced to ignore any waiting time.
          dlCpuProfiler.reset();
-@@ -1777,6 +1826,7 @@ namespace RT64 {
+@@ -1777,6 +1989,7 @@ namespace RT64 {
          // Extended GBI must be enabled again when the display list starts.
          disableExtendedGBI();
          clearExtended();
@@ -291,6 +585,21 @@ index 6b0bb31..82c2538 100644
      }
      
      void State::updateScreen(const VI &newVI, bool fromEarlyPresent) {
+diff --git a/src/hle/rt64_state.h b/src/hle/rt64_state.h
+index cded4ca..876adc0 100644
+--- a/src/hle/rt64_state.h
++++ b/src/hle/rt64_state.h
+@@ -144,6 +144,10 @@ namespace RT64 {
+         void submitFramebufferPair(FramebufferPair::FlushReason flushReason);
+         void checkRDRAM();
+         void fullSync();
++        // Mario Tennis: RDRAM as it was when the RDP would have drawn (see fullSync).
++        std::vector<std::pair<uint32_t, std::vector<uint8_t>>> mtRdramSnapshots;
++        void mtSnapshotRange(uint32_t address, uint32_t bytes);
++        void mtCopyNativeToRAMMerged(Framebuffer *fb, uint32_t rowWidth, uint32_t rowStart, uint32_t rowEnd);
+         void fullSyncFramebufferPairTiles(Workload &workload, FramebufferPair &fbPair, uint32_t &loadOpCursor, uint32_t &rdpTileCursor);
+         void updateScreen(const VI &newVI, bool fromEarlyPresent);
+         void updateMultisampling();
 diff --git a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuffer_renderer.cpp
 index c4cf1bf..be72f26 100644
 --- a/src/render/rt64_framebuffer_renderer.cpp

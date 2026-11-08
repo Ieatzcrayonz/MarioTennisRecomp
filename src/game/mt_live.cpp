@@ -9,6 +9,7 @@
 // Patches and hooks from mt.us.toml are applied the same way N64Recomp's CLI applies them; hooks run as
 // events (see the "@event:N" support in the N64Recomp patch).
 
+#include <algorithm>
 #include <chrono>
 #include <io.h>
 #include <cstdio>
@@ -122,6 +123,8 @@ namespace {
     std::vector<SectionTableEntry> section_table;
     int overlay_sections_by_index[] = { -1 };
     recomp_func_t* entry_func = nullptr;
+    std::vector<std::pair<uintptr_t, std::string>> func_index;  // sorted by native address
+    uintptr_t code_end = 0;
 
     [[noreturn]] void fail(const std::string& msg) {
         ultramodern::error_handling::message_box(("Could not prepare the game code from your ROM:\n" + msg).c_str());
@@ -296,6 +299,15 @@ namespace {
         }
         if (entry_func == nullptr) fail("entrypoint not found");
 
+        // Diagnostics: native code address -> game function name (see mt_live_describe).
+        func_index.clear();
+        for (size_t fi = 0; fi < context.functions.size(); fi++) {
+            if (live_output->functions[fi] != nullptr && !context.functions[fi].ignored)
+                func_index.push_back({ reinterpret_cast<uintptr_t>(live_output->functions[fi]), context.functions[fi].name });
+        }
+        std::sort(func_index.begin(), func_index.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+        code_end = func_index.empty() ? 0 : func_index.back().first + 0x10000;
+
         auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count();
         std::fprintf(stderr, "[mt] live recompiled %zu functions (%zu KiB native code) in %lld ms\n",
                      compiled, live_output->code_size / 1024, (long long)ms);
@@ -312,6 +324,16 @@ namespace {
                                               .total_num_sections = std::size(mt_live_sections) },
                                             { .table = overlay_sections_by_index, .len = std::size(overlay_sections_by_index) });
     }
+}
+
+// Name of the recompiled game function containing native address `addr` (nullptr if not game code).
+extern "C" const char* mt_live_describe(const void* addr, uintptr_t* offset) {
+    uintptr_t a = reinterpret_cast<uintptr_t>(addr);
+    if (func_index.empty() || a < func_index.front().first || a >= code_end) return nullptr;
+    auto it = std::upper_bound(func_index.begin(), func_index.end(), a, [](uintptr_t v, const auto& e) { return v < e.first; });
+    --it;
+    if (offset) *offset = a - it->first;
+    return it->second.c_str();
 }
 
 extern "C" void recomp_entrypoint(uint8_t* rdram, recomp_context* ctx) {
