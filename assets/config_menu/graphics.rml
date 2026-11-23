@@ -333,8 +333,9 @@
                                 value="D3D12"
                                 id="api_d3d12"
                                 style="nav-up: #hr_original; nav-down: #shader_off"
+                                data-if="show_d3d12_option"
                             />
-                            <label class="config-option__tab-label" for="api_d3d12">DirectX 12</label>
+                            <label class="config-option__tab-label" for="api_d3d12" data-if="show_d3d12_option">DirectX 12</label>
                             <input type="radio"
                                 data-event-blur="set_cur_config_index(-1)"
                                 data-event-focus="set_cur_config_index(7)"

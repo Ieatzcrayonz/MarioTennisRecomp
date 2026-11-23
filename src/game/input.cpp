@@ -639,7 +639,11 @@ void recomp::update_rumble() {
     // changed (plus a periodic resend). With local multiplayer on, controller N rumbles for player
     // N+1; otherwise every controller rumbles for player 1.
     static std::mutex rumble_mutex;
+    #ifdef __linux__
+    static auto& rumble_cv = *new std::condition_variable{};
+    #else
     static std::condition_variable rumble_cv;
+    #endif
     static std::array<uint16_t, 4> rumble_values{};
     static bool rumble_pending = false;
     static bool rumble_resend = false;

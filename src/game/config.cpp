@@ -122,6 +122,13 @@ namespace ultramodern {
         if (config.api_option != ultramodern::renderer::GraphicsApi::D3D12 && config.api_option != ultramodern::renderer::GraphicsApi::Vulkan) {
             config.api_option = api_default;
         }
+
+        #ifndef _WIN32
+        if (config.api_option == ultramodern::renderer::GraphicsApi::D3D12) {
+            config.api_option = ultramodern::renderer::GraphicsApi::Vulkan;
+        }
+        #endif
+
         config.ds_option        = from_or_default(j, "ds_option",       ds_default);
         config.ar_option        = from_or_default(j, "ar_option",       ar_default);
         config.msaa_option      = from_or_default(j, "msaa_option",     msaa_default);

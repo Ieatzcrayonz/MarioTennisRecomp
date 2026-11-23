@@ -380,8 +380,8 @@ std::vector<recomp::GameEntry> supported_games = {
         // cartridge boot stub would (clear + LZ-decompress main) before main runs.
         .entrypoint_address = (gpr)(int32_t)0x80031000,
         .entrypoint = recomp_entrypoint,
-        .on_init_callback = mt::on_init,
         .thread_create_callback = [](uint8_t* rdram, recomp_context*) { mt_prof_thread_created(rdram); },
+        .on_init_callback = mt::on_init,
     },
 };
 

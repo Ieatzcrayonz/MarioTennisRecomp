@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <string>
+#include <cstdint>
 
 namespace zelda64 {
     struct SceneWarps {
@@ -19,7 +20,7 @@ namespace zelda64 {
     extern std::vector<AreaWarps> game_warps;
 
     void do_warp(int area, int scene, int entrance);
-    void set_time(uint8_t day, uint8_t hour, uint8_t minute);
+    void set_time(std::uint8_t day, std::uint8_t hour, std::uint8_t minute);
 }
 
 #endif

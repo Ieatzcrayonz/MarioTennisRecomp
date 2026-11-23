@@ -77,7 +77,7 @@ namespace RT64 {
     MtShaderPass::MtShaderPass() : impl(std::make_unique<Impl>()) { }
 
     MtShaderPass::~MtShaderPass() {
-        if (libra().instance_loaded) impl->freeChain();
+        impl->freeChain();
     }
 
     bool MtShaderPass::wanted() {

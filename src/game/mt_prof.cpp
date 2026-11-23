@@ -360,5 +360,6 @@ void mt_dump_all_stacks() {
     fflush(stderr);
 }
 #else
+extern "C" void mt_print_game_stack(const void*, const void*, size_t) {}
 void mt_dump_all_stacks() {}
 #endif
