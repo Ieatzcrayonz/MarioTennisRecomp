@@ -639,6 +639,14 @@ public:
         new_options = ultramodern::renderer::get_graphics_config();
         bind_config_list_events(constructor);
 
+        constructor.BindFunc("show_d3d12_option", [](Rml::Variant& out) {
+        #ifdef _WIN32
+            out = true;
+        #else
+            out = false;
+        #endif
+        });
+
         constructor.BindFunc("res_option",
             [](Rml::Variant& out) { get_option(new_options.res_option, out); },
             [](const Rml::Variant& in) {

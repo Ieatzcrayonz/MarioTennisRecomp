@@ -8,4 +8,4 @@ std::vector<zelda64::AreaWarps> zelda64::game_warps{
 };
 
 void zelda64::do_warp(int, int, int) {}
-void zelda64::set_time(uint8_t, uint8_t, uint8_t) {}
+void zelda64::set_time(std::uint8_t, std::uint8_t, std::uint8_t) {}
